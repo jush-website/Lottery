@@ -69,7 +69,7 @@ const App = () => {
     const iconDataUrl = `data:image/svg+xml;charset=utf-8,${iconSvg}`;
 
     const manifest = {
-      "name": "台灣幸運選號王",
+      "name": "彩券選號王",
       "short_name": "選號王",
       "start_url": ".",
       "display": "standalone",
