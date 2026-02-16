@@ -2,23 +2,45 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Sparkles, CircleDollarSign, Ticket, RefreshCw, Trophy, Smartphone, Monitor } from 'lucide-react';
 
 const App = () => {
-  const [gameType, setGameType] = useState('superLotto'); // superLotto, lotto649, scratch
+  const [gameType, setGameType] = useState('superLotto');
   const [numbers, setNumbers] = useState([]);
   const [specialNumber, setSpecialNumber] = useState(null);
   const [isRolling, setIsRolling] = useState(false);
-  
-  // 修改：將原本單一的 boolean 改為陣列，記錄每一張刮刮樂的覆蓋狀態
   const [scratchStates, setScratchStates] = useState([]); 
   const [isMobile, setIsMobile] = useState(false);
+  
+  // 新增：載入狀態，預設為 true (顯示載入畫面)
+  const [isLoading, setIsLoading] = useState(true);
 
-  // --- 自動載入 Tailwind CSS (修復樣式遺失問題) ---
+  // --- 自動載入 Tailwind CSS (修復樣式遺失問題並加入載入檢測) ---
   useEffect(() => {
-    if (!document.querySelector('script[src*="tailwindcss"]')) {
+    // 檢查是否已經有 Tailwind
+    const existingScript = document.querySelector('script[src*="tailwindcss"]');
+    
+    // 定義完成載入的動作
+    const handleLoadComplete = () => {
+      // 稍微延遲一點點，確保樣式引擎已經解析完畢
+      setTimeout(() => {
+        setIsLoading(false);
+      }, 500);
+    };
+
+    if (existingScript) {
+      // 如果腳本已存在，直接結束載入
+      handleLoadComplete();
+    } else {
+      // 如果腳本不存在，動態插入並監聽 load 事件
       const script = document.createElement('script');
       script.src = "https://cdn.tailwindcss.com";
       script.async = true;
+      script.onload = handleLoadComplete;
+      script.onerror = handleLoadComplete; // 即使失敗也進入系統，避免卡死
       document.head.appendChild(script);
     }
+
+    // 安全機制：最長只載入 3 秒，避免網路太慢卡在載入畫面
+    const safetyTimeout = setTimeout(() => setIsLoading(false), 3000);
+    return () => clearTimeout(safetyTimeout);
   }, []);
 
   // 偵測裝置尺寸
@@ -29,16 +51,15 @@ const App = () => {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // 格式化數字，小於10補0
+  // 格式化數字
   const formatNumber = (num) => {
     if (num === null) return '??';
     return num < 10 ? `0${num}` : `${num}`;
   };
 
-  // 修改：增加 sort 參數，控制是否需要排序 (刮刮樂不排序較自然)
+  // 產生不重複隨機數字
   const generateUniqueNumbers = (count, min, max, sort = true) => {
     const nums = new Set();
-    // 安全機制：避免無窮迴圈 (雖然在此範圍不可能)
     let safety = 0;
     while (nums.size < count && safety < 1000) {
       nums.add(Math.floor(Math.random() * (max - min + 1)) + min);
@@ -52,14 +73,13 @@ const App = () => {
   const handleGenerate = useCallback(() => {
     setIsRolling(true);
     
-    // 重置刮刮樂狀態：如果是刮刮樂模式，預備 5 個覆蓋狀態
+    // 修改：重置刮刮樂狀態，現在改為 6 張
     if (gameType === 'scratch') {
-      setScratchStates(Array(5).fill(true));
+      setScratchStates(Array(6).fill(true));
     }
 
-    // 設定動畫時間與間隔
     let intervalId;
-    const duration = 800; // 滾動總時間
+    const duration = 800;
     const startTime = Date.now();
 
     const updateNumbers = () => {
@@ -72,8 +92,10 @@ const App = () => {
         setNumbers(generateUniqueNumbers(6, 1, 49));
         setSpecialNumber(null);
       } else if (gameType === 'scratch') {
-        // 修改：滾動時也產生 5 個號碼，不排序增加動感
-        setNumbers(generateUniqueNumbers(5, 1, 999, false));
+        // 修改：滾動時產生 3個(1-99) + 3個(100-999)
+        const smallNums = generateUniqueNumbers(3, 1, 99, false);
+        const bigNums = generateUniqueNumbers(3, 100, 999, false);
+        setNumbers([...smallNums, ...bigNums]);
         setSpecialNumber(null);
       }
 
@@ -94,31 +116,28 @@ const App = () => {
     } else if (gameType === 'lotto649') {
       setNumbers(generateUniqueNumbers(6, 1, 49));
     } else if (gameType === 'scratch') {
-      // 修改：最終產生 5 個不重複號碼，不排序
-      setNumbers(generateUniqueNumbers(5, 1, 999, false));
-      // 這裡不需重置 scratchStates，因為在 handleGenerate 開始時已經重置了，
-      // 這樣使用者才能去刮開它們
+      // 修改：最終定案產生 3個(1-99) + 3個(100-999)
+      const smallNums = generateUniqueNumbers(3, 1, 99, false);
+      const bigNums = generateUniqueNumbers(3, 100, 999, false);
+      setNumbers([...smallNums, ...bigNums]);
     }
   };
 
-  // 切換遊戲時重置
   useEffect(() => {
     setNumbers([]);
     setSpecialNumber(null);
     setIsRolling(false);
-    // 預設給 5 個 false 或是空陣列皆可，反正按鈕按下會重置
-    setScratchStates(Array(5).fill(true));
+    // 修改：預設為 6 張刮刮卡
+    setScratchStates(Array(6).fill(true));
   }, [gameType]);
 
-  // 處理單張刮刮樂點擊
   const handleScratchClick = (index) => {
     if (isRolling) return;
     const newStates = [...scratchStates];
-    newStates[index] = false; // 揭開該張
+    newStates[index] = false;
     setScratchStates(newStates);
   };
 
-  // UI 元件：彩球
   const LottoBall = ({ num, colorClass, label }) => (
     <div className="flex flex-col items-center animate-bounce-short">
       <div className={`
@@ -132,6 +151,48 @@ const App = () => {
     </div>
   );
 
+  // --- 載入畫面 (使用 Inline Styles 避免依賴 Tailwind) ---
+  if (isLoading) {
+    return (
+      <div style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100vw',
+        height: '100vh',
+        backgroundColor: '#4f46e5', // 與主題色一致
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 9999,
+        color: 'white',
+        fontFamily: 'system-ui, -apple-system, sans-serif'
+      }}>
+        {/* CSS 轉圈圈動畫 */}
+        <div style={{
+          width: '50px',
+          height: '50px',
+          border: '4px solid rgba(255, 255, 255, 0.3)',
+          borderTop: '4px solid white',
+          borderRadius: '50%',
+          animation: 'spin 1s linear infinite',
+          marginBottom: '20px'
+        }}></div>
+        <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', letterSpacing: '1px' }}>
+          台灣幸運選號王
+        </h2>
+        <p style={{ marginTop: '10px', fontSize: '0.9rem', opacity: 0.8 }}>
+          系統啟動中...
+        </p>
+        <style dangerouslySetInnerHTML={{__html: `
+          @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        `}} />
+      </div>
+    );
+  }
+
+  // --- 主應用程式 ---
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-blue-100 flex flex-col items-center justify-start sm:justify-center font-sans sm:p-4">
       {/* 主要卡片容器 */}
@@ -245,10 +306,12 @@ const App = () => {
             </div>
           )}
 
-          {/* 刮刮樂顯示區 (更新版：5個號碼) */}
+          {/* 刮刮樂顯示區 (6個號碼：3小 + 3大) */}
           {gameType === 'scratch' && (
             <div className="w-full flex flex-col items-center animate-fade-in">
-              <div className="mb-6 text-pink-800 font-semibold bg-pink-100 inline-block px-4 py-1.5 rounded-full text-xs sm:text-sm shadow-sm">隨機號碼 (1-999) x 5</div>
+              <div className="mb-6 text-pink-800 font-semibold bg-pink-100 inline-block px-4 py-1.5 rounded-full text-xs sm:text-sm shadow-sm">
+                幸運號碼 (1-99 三組 + 100-999 三組)
+              </div>
               
               <div className="flex flex-wrap justify-center gap-4 w-full">
                 {numbers.length > 0 ? (
@@ -273,6 +336,7 @@ const App = () => {
                         scratchStates[index] ? 'opacity-100' : 'opacity-0 pointer-events-none transform scale-110'
                       }`}>
                          <span className="text-gray-100 font-bold text-sm sm:text-lg drop-shadow-md">刮</span>
+                         {/* 增加小標籤提示區間 (作弊看一下?)，或者保持神秘感不顯示。這邊保持神秘感比較好玩。 */}
                       </div>
                       
                       {/* 裝飾紋路 */}
@@ -281,13 +345,13 @@ const App = () => {
                   ))
                 ) : (
                   <div className="relative w-full max-w-xs aspect-[2/1] bg-gray-100 rounded-xl border-2 border-dashed border-gray-300 flex items-center justify-center text-gray-400 text-sm">
-                    點擊按鈕產生 5 組號碼
+                    點擊按鈕產生 6 組幸運號碼
                   </div>
                 )}
               </div>
               
               <p className="mt-6 text-sm text-gray-500 animate-pulse">
-                {numbers.length > 0 && !isRolling ? "👇 點擊個別卡片刮開號碼" : "✨ 試試手氣！一次五組！"}
+                {numbers.length > 0 && !isRolling ? "👇 點擊個別卡片刮開號碼" : "✨ 試試手氣！包含大小號碼！"}
               </p>
             </div>
           )}
