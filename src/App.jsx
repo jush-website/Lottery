@@ -40,13 +40,13 @@ const App = () => {
 
   // --- 2. PWA 初始化與 Meta 標籤注入 ---
   useEffect(() => {
-    // 2.1 注入 Meta Tags (讓手機版看起來像 App)
+    // 2.1 注入 Meta Tags
     const metaTags = [
       { name: 'apple-mobile-web-app-capable', content: 'yes' },
       { name: 'apple-mobile-web-app-status-bar-style', content: 'black-translucent' },
       { name: 'apple-mobile-web-app-title', content: '選號王' },
       { name: 'theme-color', content: '#4f46e5' },
-      { name: 'viewport', content: 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no' } // 禁止縮放，像原生App
+      { name: 'viewport', content: 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no' }
     ];
 
     metaTags.forEach(tag => {
@@ -58,12 +58,12 @@ const App = () => {
       }
     });
 
-    // 2.2 動態產生 Manifest (App 設定檔)
-    // 使用 Data URI 生成一個簡單的獎盃 Icon
+    // 2.2 動態產生 Manifest (App 設定檔 - 更新為招財貓)
+    // 使用 Emoji 🐱 代表招財貓作為 Icon
     const iconSvg = encodeURIComponent(`
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-        <rect width="512" height="512" fill="#4f46e5"/>
-        <text x="50%" y="55%" dominant-baseline="middle" text-anchor="middle" font-size="250">🏆</text>
+        <rect width="512" height="512" fill="#fbbf24"/>
+        <text x="50%" y="55%" dominant-baseline="middle" text-anchor="middle" font-size="300">🐱</text>
       </svg>
     `);
     const iconDataUrl = `data:image/svg+xml;charset=utf-8,${iconSvg}`;
@@ -97,7 +97,7 @@ const App = () => {
     }
     link.href = manifestURL;
 
-    // 2.3 監聽安裝事件 (Android/Desktop)
+    // 2.3 監聽安裝事件
     const handleBeforeInstallPrompt = (e) => {
       e.preventDefault();
       setDeferredPrompt(e);
@@ -111,7 +111,6 @@ const App = () => {
     };
   }, []);
 
-  // 觸發安裝
   const handleInstallClick = async () => {
     if (!deferredPrompt) return;
     deferredPrompt.prompt();
@@ -122,7 +121,6 @@ const App = () => {
     setDeferredPrompt(null);
   };
 
-  // 偵測裝置尺寸
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 640);
     checkMobile();
@@ -303,7 +301,7 @@ const App = () => {
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-blue-100 flex flex-col items-center justify-start sm:justify-center font-sans sm:p-4">
       <div className="bg-white w-full max-w-3xl sm:rounded-3xl shadow-2xl overflow-hidden border-gray-100 flex flex-col min-h-screen sm:min-h-0 sm:h-auto transition-all duration-500 relative">
         
-        {/* 安裝按鈕 (僅在可安裝時顯示) */}
+        {/* 安裝按鈕 */}
         {showInstallBtn && (
           <button 
             onClick={handleInstallClick}
@@ -313,15 +311,28 @@ const App = () => {
           </button>
         )}
 
-        {/* Header */}
+        {/* Header - 更新為使用招財貓圖片 */}
         <div className="bg-indigo-600 p-4 sm:p-8 text-center relative overflow-hidden flex-shrink-0">
           <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
              <div className="absolute -top-10 -left-10 w-40 h-40 bg-white rounded-full mix-blend-overlay filter blur-3xl"></div>
              <div className="absolute top-20 right-10 w-20 h-20 bg-yellow-300 rounded-full mix-blend-overlay filter blur-xl"></div>
           </div>
-          <div className="relative z-10">
-            <h1 className="text-2xl sm:text-4xl font-bold text-white flex items-center justify-center gap-2 sm:gap-3">
-              <Trophy className="w-6 h-6 sm:w-10 sm:h-10 text-yellow-300" />
+          <div className="relative z-10 flex flex-col items-center">
+            {/* 招財貓圖片區塊 */}
+            <div className="w-20 h-20 sm:w-28 sm:h-28 rounded-full bg-white p-1 shadow-xl mb-3 border-4 border-yellow-300 transform hover:scale-105 transition-transform duration-300">
+               <img 
+                 src="lottery.jpg" 
+                 alt="幸運招財貓" 
+                 className="w-full h-full object-cover rounded-full"
+                 onError={(e) => {
+                   e.target.onerror = null;
+                   // 備用圖片：使用網路上公開的招財貓 icon，確保預覽不破圖
+                   e.target.src = "https://cdn-icons-png.flaticon.com/512/616/616430.png";
+                 }}
+               />
+            </div>
+
+            <h1 className="text-2xl sm:text-4xl font-bold text-white flex items-center justify-center gap-2 sm:gap-3 drop-shadow-md">
               台灣幸運選號王
             </h1>
             <div className="flex items-center justify-center gap-2 mt-2">
