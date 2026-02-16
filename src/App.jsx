@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Sparkles, CircleDollarSign, Ticket, RefreshCw, Trophy, Smartphone, Monitor, Brain, Flame, Snowflake } from 'lucide-react';
+import { Sparkles, CircleDollarSign, Ticket, RefreshCw, Trophy, Smartphone, Monitor, Brain, Flame, Snowflake, Download, Share } from 'lucide-react';
 
 const App = () => {
   const [gameType, setGameType] = useState('superLotto');
@@ -10,15 +10,18 @@ const App = () => {
   const [isMobile, setIsMobile] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   
-  // 新增：AI 分析相關狀態
+  // AI 分析相關狀態
   const [isAiAnalyzing, setIsAiAnalyzing] = useState(false);
   const [analysisData, setAnalysisData] = useState(null); 
   const [useAi, setUseAi] = useState(false); 
 
-  // --- 自動載入 Tailwind CSS ---
+  // PWA 安裝相關狀態
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [showInstallBtn, setShowInstallBtn] = useState(false);
+
+  // --- 1. 自動載入 Tailwind CSS ---
   useEffect(() => {
     const existingScript = document.querySelector('script[src*="tailwindcss"]');
-    // 稍微延長載入時間，確保使用者能看到完整的轉場動畫，且樣式引擎完全就緒
     const handleLoadComplete = () => setTimeout(() => setIsLoading(false), 1200);
 
     if (existingScript) {
@@ -31,10 +34,93 @@ const App = () => {
       script.onerror = handleLoadComplete;
       document.head.appendChild(script);
     }
-    // 安全機制
     const safetyTimeout = setTimeout(() => setIsLoading(false), 4000);
     return () => clearTimeout(safetyTimeout);
   }, []);
+
+  // --- 2. PWA 初始化與 Meta 標籤注入 ---
+  useEffect(() => {
+    // 2.1 注入 Meta Tags (讓手機版看起來像 App)
+    const metaTags = [
+      { name: 'apple-mobile-web-app-capable', content: 'yes' },
+      { name: 'apple-mobile-web-app-status-bar-style', content: 'black-translucent' },
+      { name: 'apple-mobile-web-app-title', content: '選號王' },
+      { name: 'theme-color', content: '#4f46e5' },
+      { name: 'viewport', content: 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no' } // 禁止縮放，像原生App
+    ];
+
+    metaTags.forEach(tag => {
+      if (!document.querySelector(`meta[name="${tag.name}"]`)) {
+        const meta = document.createElement('meta');
+        meta.name = tag.name;
+        meta.content = tag.content;
+        document.head.appendChild(meta);
+      }
+    });
+
+    // 2.2 動態產生 Manifest (App 設定檔)
+    // 使用 Data URI 生成一個簡單的獎盃 Icon
+    const iconSvg = encodeURIComponent(`
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+        <rect width="512" height="512" fill="#4f46e5"/>
+        <text x="50%" y="55%" dominant-baseline="middle" text-anchor="middle" font-size="250">🏆</text>
+      </svg>
+    `);
+    const iconDataUrl = `data:image/svg+xml;charset=utf-8,${iconSvg}`;
+
+    const manifest = {
+      "name": "台灣幸運選號王",
+      "short_name": "選號王",
+      "start_url": ".",
+      "display": "standalone",
+      "background_color": "#ffffff",
+      "theme_color": "#4f46e5",
+      "orientation": "portrait",
+      "icons": [
+        {
+          "src": iconDataUrl,
+          "sizes": "512x512",
+          "type": "image/svg+xml"
+        }
+      ]
+    };
+
+    const stringManifest = JSON.stringify(manifest);
+    const blob = new Blob([stringManifest], {type: 'application/json'});
+    const manifestURL = URL.createObjectURL(blob);
+    
+    let link = document.querySelector('link[rel="manifest"]');
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'manifest';
+      document.head.appendChild(link);
+    }
+    link.href = manifestURL;
+
+    // 2.3 監聽安裝事件 (Android/Desktop)
+    const handleBeforeInstallPrompt = (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setShowInstallBtn(true);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
+  }, []);
+
+  // 觸發安裝
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setShowInstallBtn(false);
+    }
+    setDeferredPrompt(null);
+  };
 
   // 偵測裝置尺寸
   useEffect(() => {
@@ -44,13 +130,11 @@ const App = () => {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // 格式化數字
   const formatNumber = (num) => {
     if (num === null) return '??';
     return num < 10 ? `0${num}` : `${num}`;
   };
 
-  // 本機隨機選號邏輯
   const generateUniqueNumbers = (count, min, max, sort = true) => {
     const nums = new Set();
     while (nums.size < count) {
@@ -60,7 +144,6 @@ const App = () => {
     return sort ? arr.sort((a, b) => a - b) : arr;
   };
 
-  // 呼叫 API 進行 AI 選號
   const fetchAiNumbers = async () => {
     try {
       const apiUrl = `/api/analyze-lottery?type=${gameType}`;
@@ -78,7 +161,6 @@ const App = () => {
     }
   };
 
-  // 主要開獎邏輯
   const handleGenerate = useCallback(async (mode = 'random') => {
     if (isRolling || isAiAnalyzing) return;
     if (gameType === 'scratch') mode = 'random';
@@ -190,78 +272,28 @@ const App = () => {
     </div>
   );
 
-  // --- 載入畫面 (使用 Inline Styles 解決無樣式閃爍問題) ---
-  // 注意：這裡完全不使用 Tailwind classes，確保在 CSS 載入前就能正確顯示
+  // --- 載入畫面 ---
   if (isLoading) {
     return (
       <div style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        background: 'linear-gradient(135deg, #3730a3, #4f46e5)', // 近似 indigo-800 到 indigo-600
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'center',
-        alignItems: 'center',
-        zIndex: 9999,
-        color: 'white',
-        fontFamily: 'system-ui, -apple-system, sans-serif'
+        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+        background: 'linear-gradient(135deg, #3730a3, #4f46e5)',
+        display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center',
+        zIndex: 9999, color: 'white', fontFamily: 'system-ui, -apple-system, sans-serif'
       }}>
-        {/* 定義 Keyframes */}
         <style dangerouslySetInnerHTML={{__html: `
-          @keyframes custom-bounce {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-15px); }
-          }
-          @keyframes custom-pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.6; }
-          }
+          @keyframes custom-bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-15px); } }
+          @keyframes custom-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
         `}} />
-        
         <div style={{ position: 'relative', marginBottom: '1.5rem' }}>
            <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end' }}>
-             {/* 綠球 */}
-             <div style={{ 
-               width: '2rem', height: '2rem', backgroundColor: '#2dd4bf', borderRadius: '50%', 
-               boxShadow: '0 4px 6px -1px rgba(45, 212, 191, 0.5)',
-               animation: 'custom-bounce 0.6s infinite ease-in-out', animationDelay: '0ms' 
-             }}></div>
-             {/* 黃球 */}
-             <div style={{ 
-               width: '2rem', height: '2rem', backgroundColor: '#facc15', borderRadius: '50%', 
-               boxShadow: '0 4px 6px -1px rgba(250, 204, 21, 0.5)',
-               animation: 'custom-bounce 0.6s infinite ease-in-out', animationDelay: '150ms' 
-             }}></div>
-             {/* 紅球 */}
-             <div style={{ 
-               width: '2rem', height: '2rem', backgroundColor: '#ec4899', borderRadius: '50%', 
-               boxShadow: '0 4px 6px -1px rgba(236, 72, 153, 0.5)',
-               animation: 'custom-bounce 0.6s infinite ease-in-out', animationDelay: '300ms' 
-             }}></div>
+             <div style={{ width: '2rem', height: '2rem', backgroundColor: '#2dd4bf', borderRadius: '50%', boxShadow: '0 4px 6px -1px rgba(45, 212, 191, 0.5)', animation: 'custom-bounce 0.6s infinite ease-in-out', animationDelay: '0ms' }}></div>
+             <div style={{ width: '2rem', height: '2rem', backgroundColor: '#facc15', borderRadius: '50%', boxShadow: '0 4px 6px -1px rgba(250, 204, 21, 0.5)', animation: 'custom-bounce 0.6s infinite ease-in-out', animationDelay: '150ms' }}></div>
+             <div style={{ width: '2rem', height: '2rem', backgroundColor: '#ec4899', borderRadius: '50%', boxShadow: '0 4px 6px -1px rgba(236, 72, 153, 0.5)', animation: 'custom-bounce 0.6s infinite ease-in-out', animationDelay: '300ms' }}></div>
            </div>
-           {/* 陰影 */}
-           <div style={{ 
-             position: 'absolute', bottom: '-0.5rem', left: 0, width: '100%', height: '4px', 
-             backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: '50%', filter: 'blur(4px)' 
-           }}></div>
         </div>
-
-        <h2 style={{ 
-          fontSize: '1.875rem', fontWeight: 'bold', letterSpacing: '0.1em', 
-          textShadow: '0 2px 4px rgba(0,0,0,0.2)', marginBottom: '0.5rem'
-        }}>
-          台灣幸運選號王
-        </h2>
-        
-        <p style={{ 
-          color: 'rgba(224, 231, 255, 0.9)', fontSize: '0.875rem', letterSpacing: '0.05em', 
-          animation: 'custom-pulse 2s infinite ease-in-out' 
-        }}>
-          正在準備您的幸運號碼...
-        </p>
+        <h2 style={{ fontSize: '1.875rem', fontWeight: 'bold', letterSpacing: '0.1em', marginBottom: '0.5rem' }}>台灣幸運選號王</h2>
+        <p style={{ color: 'rgba(224, 231, 255, 0.9)', fontSize: '0.875rem', animation: 'custom-pulse 2s infinite ease-in-out' }}>正在準備您的幸運號碼...</p>
       </div>
     );
   }
@@ -269,8 +301,18 @@ const App = () => {
   // --- 主應用程式 ---
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-blue-100 flex flex-col items-center justify-start sm:justify-center font-sans sm:p-4">
-      <div className="bg-white w-full max-w-3xl sm:rounded-3xl shadow-2xl overflow-hidden border-gray-100 flex flex-col min-h-screen sm:min-h-0 sm:h-auto transition-all duration-500">
+      <div className="bg-white w-full max-w-3xl sm:rounded-3xl shadow-2xl overflow-hidden border-gray-100 flex flex-col min-h-screen sm:min-h-0 sm:h-auto transition-all duration-500 relative">
         
+        {/* 安裝按鈕 (僅在可安裝時顯示) */}
+        {showInstallBtn && (
+          <button 
+            onClick={handleInstallClick}
+            className="absolute top-4 right-4 z-50 bg-indigo-600 text-white px-3 py-1.5 rounded-full shadow-lg flex items-center gap-1 text-xs font-bold animate-pulse hover:bg-indigo-700 transition-colors"
+          >
+            <Download className="w-3 h-3" /> 安裝 App
+          </button>
+        )}
+
         {/* Header */}
         <div className="bg-indigo-600 p-4 sm:p-8 text-center relative overflow-hidden flex-shrink-0">
           <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
@@ -296,9 +338,7 @@ const App = () => {
           <button
             onClick={() => setGameType('superLotto')}
             className={`flex-1 py-3 sm:py-4 text-xs sm:text-base font-bold transition-all flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 ${
-              gameType === 'superLotto' 
-                ? 'bg-white text-indigo-600 border-b-4 border-indigo-600' 
-                : 'text-gray-400 hover:bg-gray-100'
+              gameType === 'superLotto' ? 'bg-white text-indigo-600 border-b-4 border-indigo-600' : 'text-gray-400 hover:bg-gray-100'
             }`}
           >
             <Sparkles className="w-5 h-5 sm:w-4 sm:h-4" /> 威力彩
@@ -306,9 +346,7 @@ const App = () => {
           <button
             onClick={() => setGameType('lotto649')}
             className={`flex-1 py-3 sm:py-4 text-xs sm:text-base font-bold transition-all flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 ${
-              gameType === 'lotto649' 
-                ? 'bg-white text-yellow-600 border-b-4 border-yellow-500' 
-                : 'text-gray-400 hover:bg-gray-100'
+              gameType === 'lotto649' ? 'bg-white text-yellow-600 border-b-4 border-yellow-500' : 'text-gray-400 hover:bg-gray-100'
             }`}
           >
             <CircleDollarSign className="w-5 h-5 sm:w-4 sm:h-4" /> 大樂透
@@ -316,9 +354,7 @@ const App = () => {
           <button
             onClick={() => setGameType('scratch')}
             className={`flex-1 py-3 sm:py-4 text-xs sm:text-base font-bold transition-all flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 ${
-              gameType === 'scratch' 
-                ? 'bg-white text-pink-600 border-b-4 border-pink-500' 
-                : 'text-gray-400 hover:bg-gray-100'
+              gameType === 'scratch' ? 'bg-white text-pink-600 border-b-4 border-pink-500' : 'text-gray-400 hover:bg-gray-100'
             }`}
           >
             <Ticket className="w-5 h-5 sm:w-4 sm:h-4" /> 刮刮樂
@@ -458,7 +494,6 @@ const App = () => {
           p-4 bg-white border-t border-gray-100 flex flex-col sm:flex-row gap-3 justify-center items-center
           ${isMobile ? 'sticky bottom-0 z-30 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]' : ''}
         `}>
-          {/* 一般隨機選號按鈕 */}
           <button
             onClick={() => handleGenerate('random')}
             disabled={isRolling || isAiAnalyzing}
@@ -472,7 +507,6 @@ const App = () => {
             {(isRolling && !useAi) ? '選號中...' : '隨機選號'}
           </button>
 
-          {/* AI 大數據選號按鈕 (刮刮樂模式下隱藏) */}
           {gameType !== 'scratch' && (
             <button
               onClick={() => handleGenerate('ai')}
@@ -497,7 +531,6 @@ const App = () => {
             </button>
           )}
           
-          {/* 刮刮樂模式下的主按鈕 */}
           {gameType === 'scratch' && (
              <button
              onClick={() => handleGenerate('random')}
@@ -512,29 +545,15 @@ const App = () => {
              {isRolling ? '準備中...' : '開始刮刮樂'}
            </button>
           )}
-
         </div>
       </div>
       
       <style dangerouslySetInnerHTML={{__html: `
-        @keyframes bounce-short {
-          0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-5px); }
-        }
-        @keyframes fade-in {
-          from { opacity: 0; transform: translateY(10px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        .animate-bounce-short {
-          animation: bounce-short 0.5s ease-in-out;
-        }
-        .animate-fade-in {
-          animation: fade-in 0.4s ease-out;
-        }
-        .pattern-dots {
-          background-image: radial-gradient(#e5e7eb 1px, transparent 1px);
-          background-size: 10px 10px;
-        }
+        @keyframes bounce-short { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+        @keyframes fade-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-bounce-short { animation: bounce-short 0.5s ease-in-out; }
+        .animate-fade-in { animation: fade-in 0.4s ease-out; }
+        .pattern-dots { background-image: radial-gradient(#e5e7eb 1px, transparent 1px); background-size: 10px 10px; }
       `}} />
     </div>
   );
