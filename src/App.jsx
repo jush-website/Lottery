@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Sparkles, CircleDollarSign, Ticket, RefreshCw, Trophy, Smartphone, Monitor } from 'lucide-react';
+import { Sparkles, CircleDollarSign, Ticket, RefreshCw, Trophy, Smartphone, Monitor, Brain, Flame, Snowflake } from 'lucide-react';
 
 const App = () => {
   const [gameType, setGameType] = useState('superLotto');
@@ -8,37 +8,28 @@ const App = () => {
   const [isRolling, setIsRolling] = useState(false);
   const [scratchStates, setScratchStates] = useState([]); 
   const [isMobile, setIsMobile] = useState(false);
-  
-  // 新增：載入狀態，預設為 true (顯示載入畫面)
   const [isLoading, setIsLoading] = useState(true);
+  
+  // 新增：AI 分析相關狀態
+  const [isAiAnalyzing, setIsAiAnalyzing] = useState(false);
+  const [analysisData, setAnalysisData] = useState(null); // 存儲 API 回傳的冷熱門數據
+  const [useAi, setUseAi] = useState(false); // 標記當次是否使用 AI
 
-  // --- 自動載入 Tailwind CSS (修復樣式遺失問題並加入載入檢測) ---
+  // --- 自動載入 Tailwind CSS ---
   useEffect(() => {
-    // 檢查是否已經有 Tailwind
     const existingScript = document.querySelector('script[src*="tailwindcss"]');
-    
-    // 定義完成載入的動作
-    const handleLoadComplete = () => {
-      // 稍微延遲一點點，確保樣式引擎已經解析完畢
-      setTimeout(() => {
-        setIsLoading(false);
-      }, 500);
-    };
+    const handleLoadComplete = () => setTimeout(() => setIsLoading(false), 500);
 
     if (existingScript) {
-      // 如果腳本已存在，直接結束載入
       handleLoadComplete();
     } else {
-      // 如果腳本不存在，動態插入並監聽 load 事件
       const script = document.createElement('script');
       script.src = "https://cdn.tailwindcss.com";
       script.async = true;
       script.onload = handleLoadComplete;
-      script.onerror = handleLoadComplete; // 即使失敗也進入系統，避免卡死
+      script.onerror = handleLoadComplete;
       document.head.appendChild(script);
     }
-
-    // 安全機制：最長只載入 3 秒，避免網路太慢卡在載入畫面
     const safetyTimeout = setTimeout(() => setIsLoading(false), 3000);
     return () => clearTimeout(safetyTimeout);
   }, []);
@@ -57,27 +48,70 @@ const App = () => {
     return num < 10 ? `0${num}` : `${num}`;
   };
 
-  // 產生不重複隨機數字
+  // 本機隨機選號邏輯
   const generateUniqueNumbers = (count, min, max, sort = true) => {
     const nums = new Set();
-    let safety = 0;
-    while (nums.size < count && safety < 1000) {
+    while (nums.size < count) {
       nums.add(Math.floor(Math.random() * (max - min + 1)) + min);
-      safety++;
     }
     const arr = Array.from(nums);
     return sort ? arr.sort((a, b) => a - b) : arr;
   };
 
-  // 主要開獎邏輯
-  const handleGenerate = useCallback(() => {
+  // 呼叫 API 進行 AI 選號
+  const fetchAiNumbers = async () => {
+    try {
+      // 判斷 API 路徑 (在 Vercel 環境下使用相對路徑)
+      const apiUrl = `/api/analyze-lottery?type=${gameType}`;
+      const res = await fetch(apiUrl);
+      const json = await res.json();
+      
+      if (json.success) {
+        return json.data;
+      } else {
+        throw new Error(json.error || 'API Error');
+      }
+    } catch (error) {
+      console.error("AI Analysis Failed, falling back to random:", error);
+      return null;
+    }
+  };
+
+  // 主要開獎邏輯 (整合 AI 與 隨機)
+  const handleGenerate = useCallback(async (mode = 'random') => {
+    if (isRolling || isAiAnalyzing) return;
+
+    // 刮刮樂強制使用隨機模式
+    if (gameType === 'scratch') mode = 'random';
+
+    setUseAi(mode === 'ai');
     setIsRolling(true);
+    if (mode === 'ai') setIsAiAnalyzing(true);
     
-    // 修改：重置刮刮樂狀態，現在改為 6 張
+    // 重置刮刮樂狀態
     if (gameType === 'scratch') {
       setScratchStates(Array(6).fill(true));
     }
+    
+    // 清空舊的分析數據 (如果是隨機模式)
+    if (mode === 'random') setAnalysisData(null);
 
+    // 1. 如果是 AI 模式，先偷跑去抓資料
+    let aiResult = null;
+    if (mode === 'ai') {
+      aiResult = await fetchAiNumbers();
+      if (aiResult) {
+        setAnalysisData({
+          hot: aiResult.hotNumbers,
+          cold: aiResult.coldNumbers,
+          lastDraw: aiResult.lastDraw
+        });
+      }
+    }
+
+    setIsAiAnalyzing(false); // AI 抓取結束，開始滾動動畫
+
+    // 2. 執行滾動動畫
     let intervalId;
     const duration = 800;
     const startTime = Date.now();
@@ -85,6 +119,7 @@ const App = () => {
     const updateNumbers = () => {
       const now = Date.now();
       
+      // 動畫期間顯示隨機亂數
       if (gameType === 'superLotto') {
         setNumbers(generateUniqueNumbers(6, 1, 38));
         setSpecialNumber(Math.floor(Math.random() * 8) + 1);
@@ -92,7 +127,6 @@ const App = () => {
         setNumbers(generateUniqueNumbers(6, 1, 49));
         setSpecialNumber(null);
       } else if (gameType === 'scratch') {
-        // 修改：滾動時產生 3個(1-99) + 3個(100-999)
         const smallNums = generateUniqueNumbers(3, 1, 99, false);
         const bigNums = generateUniqueNumbers(3, 100, 999, false);
         setNumbers([...smallNums, ...bigNums]);
@@ -102,21 +136,32 @@ const App = () => {
       if (now - startTime > duration) {
         clearInterval(intervalId);
         setIsRolling(false);
-        finalizeNumbers();
+        
+        // 3. 最終定案
+        if (mode === 'ai' && aiResult) {
+          // 使用 AI 推薦號碼
+          setNumbers(aiResult.aiRecommendation);
+          // 威力彩特別號 AI 暫時隨機 (API 可擴充)
+          if (gameType === 'superLotto') {
+             setSpecialNumber(Math.floor(Math.random() * 8) + 1);
+          }
+        } else {
+          // 使用本機隨機號碼 (或是 AI 失敗的 Fallback)
+          finalizeRandomNumbers();
+        }
       }
     };
 
     intervalId = setInterval(updateNumbers, 50);
   }, [gameType]);
 
-  const finalizeNumbers = () => {
+  const finalizeRandomNumbers = () => {
     if (gameType === 'superLotto') {
       setNumbers(generateUniqueNumbers(6, 1, 38));
       setSpecialNumber(Math.floor(Math.random() * 8) + 1);
     } else if (gameType === 'lotto649') {
       setNumbers(generateUniqueNumbers(6, 1, 49));
     } else if (gameType === 'scratch') {
-      // 修改：最終定案產生 3個(1-99) + 3個(100-999)
       const smallNums = generateUniqueNumbers(3, 1, 99, false);
       const bigNums = generateUniqueNumbers(3, 100, 999, false);
       setNumbers([...smallNums, ...bigNums]);
@@ -127,7 +172,8 @@ const App = () => {
     setNumbers([]);
     setSpecialNumber(null);
     setIsRolling(false);
-    // 修改：預設為 6 張刮刮卡
+    setAnalysisData(null);
+    setUseAi(false);
     setScratchStates(Array(6).fill(true));
   }, [gameType]);
 
@@ -138,8 +184,11 @@ const App = () => {
     setScratchStates(newStates);
   };
 
-  const LottoBall = ({ num, colorClass, label }) => (
-    <div className="flex flex-col items-center animate-bounce-short">
+  const LottoBall = ({ num, colorClass, label, isHot, isCold }) => (
+    <div className="flex flex-col items-center animate-bounce-short relative group">
+      {isHot && <div className="absolute -top-2 -right-2 text-xs bg-red-500 text-white rounded-full px-1.5 py-0.5 z-10 animate-pulse border border-white">🔥</div>}
+      {isCold && <div className="absolute -top-2 -right-2 text-xs bg-blue-400 text-white rounded-full px-1.5 py-0.5 z-10 border border-white">❄️</div>}
+      
       <div className={`
         w-10 h-10 text-lg 
         sm:w-16 sm:h-16 sm:text-2xl 
@@ -151,43 +200,13 @@ const App = () => {
     </div>
   );
 
-  // --- 載入畫面 (使用 Inline Styles 避免依賴 Tailwind) ---
+  // --- 載入畫面 ---
   if (isLoading) {
     return (
-      <div style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        width: '100vw',
-        height: '100vh',
-        backgroundColor: '#4f46e5', // 與主題色一致
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'center',
-        alignItems: 'center',
-        zIndex: 9999,
-        color: 'white',
-        fontFamily: 'system-ui, -apple-system, sans-serif'
-      }}>
-        {/* CSS 轉圈圈動畫 */}
-        <div style={{
-          width: '50px',
-          height: '50px',
-          border: '4px solid rgba(255, 255, 255, 0.3)',
-          borderTop: '4px solid white',
-          borderRadius: '50%',
-          animation: 'spin 1s linear infinite',
-          marginBottom: '20px'
-        }}></div>
-        <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', letterSpacing: '1px' }}>
-          台灣幸運選號王
-        </h2>
-        <p style={{ marginTop: '10px', fontSize: '0.9rem', opacity: 0.8 }}>
-          系統啟動中...
-        </p>
-        <style dangerouslySetInnerHTML={{__html: `
-          @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        `}} />
+      <div className="fixed inset-0 bg-indigo-600 flex flex-col justify-center items-center z-50 text-white font-sans">
+        <div className="w-12 h-12 border-4 border-white/30 border-t-white rounded-full animate-spin mb-4"></div>
+        <h2 className="text-2xl font-bold tracking-widest">台灣幸運選號王</h2>
+        <p className="mt-2 opacity-80 text-sm">系統啟動中...</p>
       </div>
     );
   }
@@ -195,8 +214,7 @@ const App = () => {
   // --- 主應用程式 ---
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-blue-100 flex flex-col items-center justify-start sm:justify-center font-sans sm:p-4">
-      {/* 主要卡片容器 */}
-      <div className="bg-white w-full max-w-3xl sm:rounded-3xl shadow-2xl overflow-hidden border-gray-100 flex flex-col min-h-screen sm:min-h-0 sm:h-auto">
+      <div className="bg-white w-full max-w-3xl sm:rounded-3xl shadow-2xl overflow-hidden border-gray-100 flex flex-col min-h-screen sm:min-h-0 sm:h-auto transition-all duration-500">
         
         {/* Header */}
         <div className="bg-indigo-600 p-4 sm:p-8 text-center relative overflow-hidden flex-shrink-0">
@@ -255,6 +273,35 @@ const App = () => {
         {/* Main Content Area */}
         <div className="flex-grow p-4 sm:p-10 flex flex-col items-center justify-start sm:justify-center bg-gray-50/50 min-h-[50vh] sm:min-h-[300px]">
           
+          {/* AI 分析提示區 */}
+          {useAi && analysisData && (
+            <div className="w-full max-w-lg mb-6 bg-indigo-50 border border-indigo-200 rounded-xl p-3 sm:p-4 animate-fade-in">
+              <div className="flex items-center gap-2 mb-2">
+                <Brain className="w-4 h-4 text-indigo-600" />
+                <h3 className="text-sm font-bold text-indigo-800">大數據分析結果</h3>
+                <span className="text-xs text-gray-500 ml-auto">{analysisData.lastDraw ? `更新至: ${analysisData.lastDraw.drawDate}` : '模擬數據分析'}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-white p-2 rounded-lg shadow-sm">
+                  <div className="flex items-center gap-1 text-xs text-gray-500 mb-1">
+                    <Flame className="w-3 h-3 text-red-500" /> 近期熱門
+                  </div>
+                  <div className="text-sm font-bold text-gray-800 tracking-wide">
+                    {analysisData.hot.slice(0, 5).map(n => formatNumber(n)).join(' ')}
+                  </div>
+                </div>
+                <div className="bg-white p-2 rounded-lg shadow-sm">
+                  <div className="flex items-center gap-1 text-xs text-gray-500 mb-1">
+                    <Snowflake className="w-3 h-3 text-blue-400" /> 近期冷門
+                  </div>
+                  <div className="text-sm font-bold text-gray-800 tracking-wide">
+                    {analysisData.cold.slice(0, 5).map(n => formatNumber(n)).join(' ')}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* 威力彩顯示區 */}
           {gameType === 'superLotto' && (
             <div className="w-full text-center animate-fade-in">
@@ -262,9 +309,11 @@ const App = () => {
                 <div className="mb-3 text-indigo-900 font-semibold bg-indigo-100 inline-block px-4 py-1.5 rounded-full text-xs sm:text-sm shadow-sm">第一區 (01-38)</div>
                 <div className="flex flex-wrap justify-center gap-3 sm:gap-6">
                   {numbers.length > 0 ? (
-                    numbers.map((num, idx) => (
-                      <LottoBall key={idx} num={num} colorClass="bg-gradient-to-br from-teal-400 to-teal-600" />
-                    ))
+                    numbers.map((num, idx) => {
+                      const isHot = analysisData?.hot.includes(num);
+                      const isCold = analysisData?.cold.includes(num);
+                      return <LottoBall key={idx} num={num} colorClass="bg-gradient-to-br from-teal-400 to-teal-600" isHot={isHot} isCold={isCold} />;
+                    })
                   ) : (
                     <div className="text-gray-400 italic py-8 text-sm sm:text-base">準備好迎接財富了嗎？</div>
                   )}
@@ -279,10 +328,7 @@ const App = () => {
                      <div className="h-px w-10 sm:w-20 bg-gray-400"></div>
                   </div>
                   <div className="inline-block relative">
-                     <div className="absolute -inset-2 bg-red-100 rounded-full blur-md opacity-70"></div>
-                     <div className="relative">
-                        <LottoBall num={specialNumber} colorClass="bg-gradient-to-br from-red-500 to-red-700" />
-                     </div>
+                     <LottoBall num={specialNumber} colorClass="bg-gradient-to-br from-red-500 to-red-700" />
                   </div>
                   <div className="mt-2 text-red-800 font-medium text-xs sm:text-sm">第二區 (01-08)</div>
                 </div>
@@ -296,9 +342,11 @@ const App = () => {
               <div className="mb-8 text-yellow-800 font-semibold bg-yellow-100 inline-block px-4 py-1.5 rounded-full text-xs sm:text-sm shadow-sm">01 ~ 49 任選 6 碼</div>
               <div className="flex flex-wrap justify-center gap-3 sm:gap-5 max-w-lg mx-auto">
                 {numbers.length > 0 ? (
-                  numbers.map((num, idx) => (
-                    <LottoBall key={idx} num={num} colorClass="bg-gradient-to-br from-yellow-400 to-yellow-600 text-yellow-900 shadow-yellow-200" />
-                  ))
+                  numbers.map((num, idx) => {
+                    const isHot = analysisData?.hot.includes(num);
+                    const isCold = analysisData?.cold.includes(num);
+                    return <LottoBall key={idx} num={num} colorClass="bg-gradient-to-br from-yellow-400 to-yellow-600 text-yellow-900 shadow-yellow-200" isHot={isHot} isCold={isCold} />;
+                  })
                 ) : (
                   <div className="text-gray-400 italic py-8 text-sm sm:text-base">按下按鈕，幸運降臨</div>
                 )}
@@ -316,13 +364,11 @@ const App = () => {
               <div className="flex flex-wrap justify-center gap-4 w-full">
                 {numbers.length > 0 ? (
                   numbers.map((num, index) => (
-                    // 獨立的刮刮卡元件
                     <div 
                       key={index}
                       className="relative w-24 h-24 sm:w-32 sm:h-32 bg-gray-200 rounded-xl shadow-inner border-2 sm:border-4 border-gray-300 overflow-hidden cursor-pointer select-none transition-transform active:scale-95 hover:shadow-lg"
                       onClick={() => handleScratchClick(index)}
                     >
-                      {/* 底層數字 */}
                       <div className="absolute inset-0 flex items-center justify-center bg-white pattern-dots">
                         <span className={`font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-purple-600 transform transition-all duration-500 ${
                           isRolling ? 'scale-75 blur-sm opacity-50' : 'scale-100 blur-0 opacity-100'
@@ -330,16 +376,11 @@ const App = () => {
                           {num}
                         </span>
                       </div>
-
-                      {/* 銀漆層 */}
                       <div className={`absolute inset-0 bg-gradient-to-br from-gray-300 via-gray-400 to-gray-500 flex flex-col items-center justify-center transition-all duration-500 ${
                         scratchStates[index] ? 'opacity-100' : 'opacity-0 pointer-events-none transform scale-110'
                       }`}>
                          <span className="text-gray-100 font-bold text-sm sm:text-lg drop-shadow-md">刮</span>
-                         {/* 增加小標籤提示區間 (作弊看一下?)，或者保持神秘感不顯示。這邊保持神秘感比較好玩。 */}
                       </div>
-                      
-                      {/* 裝飾紋路 */}
                       <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-black to-transparent pointer-events-none"></div>
                     </div>
                   ))
@@ -349,7 +390,6 @@ const App = () => {
                   </div>
                 )}
               </div>
-              
               <p className="mt-6 text-sm text-gray-500 animate-pulse">
                 {numbers.length > 0 && !isRolling ? "👇 點擊個別卡片刮開號碼" : "✨ 試試手氣！包含大小號碼！"}
               </p>
@@ -360,21 +400,64 @@ const App = () => {
 
         {/* Footer / Action */}
         <div className={`
-          p-4 bg-white border-t border-gray-100 flex justify-center
+          p-4 bg-white border-t border-gray-100 flex flex-col sm:flex-row gap-3 justify-center items-center
           ${isMobile ? 'sticky bottom-0 z-30 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]' : ''}
         `}>
+          {/* 一般隨機選號按鈕 */}
           <button
-            onClick={handleGenerate}
-            disabled={isRolling}
+            onClick={() => handleGenerate('random')}
+            disabled={isRolling || isAiAnalyzing}
             className={`
-              w-full sm:w-auto px-8 sm:px-16 py-3 sm:py-4 rounded-xl sm:rounded-full text-white font-bold text-base sm:text-lg shadow-xl
-              flex items-center justify-center gap-2 transition-all transform hover:-translate-y-1 active:scale-95
-              ${isRolling ? 'bg-gray-400 cursor-not-allowed' : 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:shadow-indigo-200 hover:ring-2 hover:ring-indigo-300'}
+              w-full sm:w-auto px-6 py-3 rounded-xl sm:rounded-full text-gray-700 font-bold text-base shadow-sm border border-gray-200
+              flex items-center justify-center gap-2 transition-all active:scale-95
+              ${(isRolling && !useAi) ? 'bg-gray-100 cursor-not-allowed' : 'bg-white hover:bg-gray-50'}
             `}
           >
-            <RefreshCw className={`w-5 h-5 ${isRolling ? 'animate-spin' : ''}`} />
-            {isRolling ? '選號中...' : '立即電腦選號'}
+            <RefreshCw className={`w-5 h-5 ${(isRolling && !useAi) ? 'animate-spin' : ''}`} />
+            {(isRolling && !useAi) ? '選號中...' : '隨機選號'}
           </button>
+
+          {/* AI 大數據選號按鈕 (刮刮樂模式下隱藏) */}
+          {gameType !== 'scratch' && (
+            <button
+              onClick={() => handleGenerate('ai')}
+              disabled={isRolling || isAiAnalyzing}
+              className={`
+                w-full sm:w-auto px-8 py-3 rounded-xl sm:rounded-full text-white font-bold text-base shadow-xl
+                flex items-center justify-center gap-2 transition-all transform hover:-translate-y-1 active:scale-95
+                ${(isRolling && useAi) || isAiAnalyzing ? 'bg-indigo-400 cursor-not-allowed' : 'bg-gradient-to-r from-violet-600 to-indigo-600 hover:shadow-indigo-200 hover:ring-2 hover:ring-indigo-300'}
+              `}
+            >
+              {isAiAnalyzing ? (
+                <>
+                   <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                   分析數據中...
+                </>
+              ) : (
+                <>
+                  <Brain className="w-5 h-5" />
+                  AI 大數據選號
+                </>
+              )}
+            </button>
+          )}
+          
+          {/* 刮刮樂模式下的主按鈕 */}
+          {gameType === 'scratch' && (
+             <button
+             onClick={() => handleGenerate('random')}
+             disabled={isRolling}
+             className={`
+               w-full sm:w-auto px-8 py-3 rounded-xl sm:rounded-full text-white font-bold text-base shadow-xl
+               flex items-center justify-center gap-2 transition-all transform hover:-translate-y-1 active:scale-95
+               ${isRolling ? 'bg-gray-400 cursor-not-allowed' : 'bg-gradient-to-r from-pink-500 to-rose-500 hover:shadow-pink-200'}
+             `}
+           >
+             <Ticket className={`w-5 h-5 ${isRolling ? 'animate-spin' : ''}`} />
+             {isRolling ? '準備中...' : '開始刮刮樂'}
+           </button>
+          )}
+
         </div>
       </div>
       
