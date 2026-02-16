@@ -6,12 +6,13 @@ const App = () => {
   const [numbers, setNumbers] = useState([]);
   const [specialNumber, setSpecialNumber] = useState(null);
   const [isRolling, setIsRolling] = useState(false);
-  const [scratchCovered, setScratchCovered] = useState(true);
+  
+  // 修改：將原本單一的 boolean 改為陣列，記錄每一張刮刮樂的覆蓋狀態
+  const [scratchStates, setScratchStates] = useState([]); 
   const [isMobile, setIsMobile] = useState(false);
 
   // --- 自動載入 Tailwind CSS (修復樣式遺失問題) ---
   useEffect(() => {
-    // 檢查是否已經有 Tailwind，如果沒有則動態插入 CDN
     if (!document.querySelector('script[src*="tailwindcss"]')) {
       const script = document.createElement('script');
       script.src = "https://cdn.tailwindcss.com";
@@ -34,19 +35,27 @@ const App = () => {
     return num < 10 ? `0${num}` : `${num}`;
   };
 
-  // 產生不重複隨機數字
-  const generateUniqueNumbers = (count, min, max) => {
+  // 修改：增加 sort 參數，控制是否需要排序 (刮刮樂不排序較自然)
+  const generateUniqueNumbers = (count, min, max, sort = true) => {
     const nums = new Set();
-    while (nums.size < count) {
+    // 安全機制：避免無窮迴圈 (雖然在此範圍不可能)
+    let safety = 0;
+    while (nums.size < count && safety < 1000) {
       nums.add(Math.floor(Math.random() * (max - min + 1)) + min);
+      safety++;
     }
-    return Array.from(nums).sort((a, b) => a - b);
+    const arr = Array.from(nums);
+    return sort ? arr.sort((a, b) => a - b) : arr;
   };
 
   // 主要開獎邏輯
   const handleGenerate = useCallback(() => {
     setIsRolling(true);
-    setScratchCovered(true); // 重置刮刮樂覆蓋層
+    
+    // 重置刮刮樂狀態：如果是刮刮樂模式，預備 5 個覆蓋狀態
+    if (gameType === 'scratch') {
+      setScratchStates(Array(5).fill(true));
+    }
 
     // 設定動畫時間與間隔
     let intervalId;
@@ -63,7 +72,8 @@ const App = () => {
         setNumbers(generateUniqueNumbers(6, 1, 49));
         setSpecialNumber(null);
       } else if (gameType === 'scratch') {
-        setNumbers([Math.floor(Math.random() * 999) + 1]);
+        // 修改：滾動時也產生 5 個號碼，不排序增加動感
+        setNumbers(generateUniqueNumbers(5, 1, 999, false));
         setSpecialNumber(null);
       }
 
@@ -84,17 +94,29 @@ const App = () => {
     } else if (gameType === 'lotto649') {
       setNumbers(generateUniqueNumbers(6, 1, 49));
     } else if (gameType === 'scratch') {
-      setNumbers([Math.floor(Math.random() * 999) + 1]);
-      setScratchCovered(false);
+      // 修改：最終產生 5 個不重複號碼，不排序
+      setNumbers(generateUniqueNumbers(5, 1, 999, false));
+      // 這裡不需重置 scratchStates，因為在 handleGenerate 開始時已經重置了，
+      // 這樣使用者才能去刮開它們
     }
   };
 
+  // 切換遊戲時重置
   useEffect(() => {
     setNumbers([]);
     setSpecialNumber(null);
     setIsRolling(false);
-    setScratchCovered(true);
+    // 預設給 5 個 false 或是空陣列皆可，反正按鈕按下會重置
+    setScratchStates(Array(5).fill(true));
   }, [gameType]);
+
+  // 處理單張刮刮樂點擊
+  const handleScratchClick = (index) => {
+    if (isRolling) return;
+    const newStates = [...scratchStates];
+    newStates[index] = false; // 揭開該張
+    setScratchStates(newStates);
+  };
 
   // UI 元件：彩球
   const LottoBall = ({ num, colorClass, label }) => (
@@ -112,10 +134,10 @@ const App = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-blue-100 flex flex-col items-center justify-start sm:justify-center font-sans sm:p-4">
-      {/* 主要卡片容器：手機版全寬，平板以上圓角置中 */}
+      {/* 主要卡片容器 */}
       <div className="bg-white w-full max-w-3xl sm:rounded-3xl shadow-2xl overflow-hidden border-gray-100 flex flex-col min-h-screen sm:min-h-0 sm:h-auto">
         
-        {/* Header：根據裝置調整高度與內距 */}
+        {/* Header */}
         <div className="bg-indigo-600 p-4 sm:p-8 text-center relative overflow-hidden flex-shrink-0">
           <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
              <div className="absolute -top-10 -left-10 w-40 h-40 bg-white rounded-full mix-blend-overlay filter blur-3xl"></div>
@@ -135,7 +157,7 @@ const App = () => {
           </div>
         </div>
 
-        {/* Tabs：手機版更緊湊 */}
+        {/* Tabs */}
         <div className="flex bg-gray-50 border-b border-gray-200 sticky top-0 z-20 sm:static">
           <button
             onClick={() => setGameType('superLotto')}
@@ -169,7 +191,7 @@ const App = () => {
           </button>
         </div>
 
-        {/* Main Content Area：彈性高度，確保內容置中 */}
+        {/* Main Content Area */}
         <div className="flex-grow p-4 sm:p-10 flex flex-col items-center justify-start sm:justify-center bg-gray-50/50 min-h-[50vh] sm:min-h-[300px]">
           
           {/* 威力彩顯示區 */}
@@ -223,43 +245,56 @@ const App = () => {
             </div>
           )}
 
-          {/* 刮刮樂顯示區 */}
+          {/* 刮刮樂顯示區 (更新版：5個號碼) */}
           {gameType === 'scratch' && (
             <div className="w-full flex flex-col items-center animate-fade-in">
-              <div className="mb-6 text-pink-800 font-semibold bg-pink-100 inline-block px-4 py-1.5 rounded-full text-xs sm:text-sm shadow-sm">隨機號碼 (1-999)</div>
+              <div className="mb-6 text-pink-800 font-semibold bg-pink-100 inline-block px-4 py-1.5 rounded-full text-xs sm:text-sm shadow-sm">隨機號碼 (1-999) x 5</div>
               
-              {/* 響應式刮刮卡容器 */}
-              <div className="relative w-full max-w-[280px] sm:max-w-md aspect-[2/1] bg-gray-200 rounded-xl shadow-inner border-4 border-gray-300 overflow-hidden cursor-pointer select-none transition-transform active:scale-95"
-                   onClick={() => !isRolling && setScratchCovered(false)}>
-                
-                {/* 底層數字 */}
-                <div className="absolute inset-0 flex items-center justify-center bg-white pattern-dots">
-                  <span className={`font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-purple-600 transform transition-all duration-500 ${
-                    isRolling ? 'scale-75 blur-sm opacity-50' : 'scale-100 blur-0 opacity-100'
-                  }`} style={{ fontSize: 'clamp(3rem, 15vw, 5rem)' }}>
-                    {numbers.length > 0 ? numbers[0] : '???'}
-                  </span>
-                </div>
+              <div className="flex flex-wrap justify-center gap-4 w-full">
+                {numbers.length > 0 ? (
+                  numbers.map((num, index) => (
+                    // 獨立的刮刮卡元件
+                    <div 
+                      key={index}
+                      className="relative w-24 h-24 sm:w-32 sm:h-32 bg-gray-200 rounded-xl shadow-inner border-2 sm:border-4 border-gray-300 overflow-hidden cursor-pointer select-none transition-transform active:scale-95 hover:shadow-lg"
+                      onClick={() => handleScratchClick(index)}
+                    >
+                      {/* 底層數字 */}
+                      <div className="absolute inset-0 flex items-center justify-center bg-white pattern-dots">
+                        <span className={`font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-purple-600 transform transition-all duration-500 ${
+                          isRolling ? 'scale-75 blur-sm opacity-50' : 'scale-100 blur-0 opacity-100'
+                        } text-2xl sm:text-4xl`}>
+                          {num}
+                        </span>
+                      </div>
 
-                {/* 銀漆層 */}
-                <div className={`absolute inset-0 bg-gradient-to-br from-gray-300 via-gray-400 to-gray-500 flex flex-col items-center justify-center transition-all duration-700 ${scratchCovered && numbers.length > 0 ? 'opacity-100' : 'opacity-0 pointer-events-none transform scale-110'}`}>
-                   <span className="text-gray-100 font-bold text-xl sm:text-3xl drop-shadow-md">幸運刮刮樂</span>
-                   <span className="text-gray-200 text-xs sm:text-sm mt-2 border border-gray-200 px-2 py-1 rounded">點擊刮開</span>
-                </div>
-                
-                {/* 裝飾紋路 */}
-                <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-black to-transparent pointer-events-none"></div>
+                      {/* 銀漆層 */}
+                      <div className={`absolute inset-0 bg-gradient-to-br from-gray-300 via-gray-400 to-gray-500 flex flex-col items-center justify-center transition-all duration-500 ${
+                        scratchStates[index] ? 'opacity-100' : 'opacity-0 pointer-events-none transform scale-110'
+                      }`}>
+                         <span className="text-gray-100 font-bold text-sm sm:text-lg drop-shadow-md">刮</span>
+                      </div>
+                      
+                      {/* 裝飾紋路 */}
+                      <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-black to-transparent pointer-events-none"></div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="relative w-full max-w-xs aspect-[2/1] bg-gray-100 rounded-xl border-2 border-dashed border-gray-300 flex items-center justify-center text-gray-400 text-sm">
+                    點擊按鈕產生 5 組號碼
+                  </div>
+                )}
               </div>
               
               <p className="mt-6 text-sm text-gray-500 animate-pulse">
-                {numbers.length > 0 && !isRolling ? (scratchCovered ? "👇 點擊卡片刮開號碼" : "🎉 恭喜獲得幸運號碼！") : "✨ 試試手氣！"}
+                {numbers.length > 0 && !isRolling ? "👇 點擊個別卡片刮開號碼" : "✨ 試試手氣！一次五組！"}
               </p>
             </div>
           )}
 
         </div>
 
-        {/* Footer / Action：手機版為 Sticky Bottom，電腦版為一般區塊 */}
+        {/* Footer / Action */}
         <div className={`
           p-4 bg-white border-t border-gray-100 flex justify-center
           ${isMobile ? 'sticky bottom-0 z-30 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]' : ''}
