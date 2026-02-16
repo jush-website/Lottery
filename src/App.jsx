@@ -12,13 +12,14 @@ const App = () => {
   
   // 新增：AI 分析相關狀態
   const [isAiAnalyzing, setIsAiAnalyzing] = useState(false);
-  const [analysisData, setAnalysisData] = useState(null); // 存儲 API 回傳的冷熱門數據
-  const [useAi, setUseAi] = useState(false); // 標記當次是否使用 AI
+  const [analysisData, setAnalysisData] = useState(null); 
+  const [useAi, setUseAi] = useState(false); 
 
   // --- 自動載入 Tailwind CSS ---
   useEffect(() => {
     const existingScript = document.querySelector('script[src*="tailwindcss"]');
-    const handleLoadComplete = () => setTimeout(() => setIsLoading(false), 800); // 稍微延長一點點欣賞動畫
+    // 稍微延長載入時間，確保使用者能看到完整的轉場動畫，且樣式引擎完全就緒
+    const handleLoadComplete = () => setTimeout(() => setIsLoading(false), 1200);
 
     if (existingScript) {
       handleLoadComplete();
@@ -30,7 +31,8 @@ const App = () => {
       script.onerror = handleLoadComplete;
       document.head.appendChild(script);
     }
-    const safetyTimeout = setTimeout(() => setIsLoading(false), 3000);
+    // 安全機制
+    const safetyTimeout = setTimeout(() => setIsLoading(false), 4000);
     return () => clearTimeout(safetyTimeout);
   }, []);
 
@@ -61,7 +63,6 @@ const App = () => {
   // 呼叫 API 進行 AI 選號
   const fetchAiNumbers = async () => {
     try {
-      // 判斷 API 路徑 (在 Vercel 環境下使用相對路徑)
       const apiUrl = `/api/analyze-lottery?type=${gameType}`;
       const res = await fetch(apiUrl);
       const json = await res.json();
@@ -77,26 +78,21 @@ const App = () => {
     }
   };
 
-  // 主要開獎邏輯 (整合 AI 與 隨機)
+  // 主要開獎邏輯
   const handleGenerate = useCallback(async (mode = 'random') => {
     if (isRolling || isAiAnalyzing) return;
-
-    // 刮刮樂強制使用隨機模式
     if (gameType === 'scratch') mode = 'random';
 
     setUseAi(mode === 'ai');
     setIsRolling(true);
     if (mode === 'ai') setIsAiAnalyzing(true);
     
-    // 重置刮刮樂狀態
     if (gameType === 'scratch') {
       setScratchStates(Array(6).fill(true));
     }
     
-    // 清空舊的分析數據 (如果是隨機模式)
     if (mode === 'random') setAnalysisData(null);
 
-    // 1. 如果是 AI 模式，先偷跑去抓資料
     let aiResult = null;
     if (mode === 'ai') {
       aiResult = await fetchAiNumbers();
@@ -109,9 +105,8 @@ const App = () => {
       }
     }
 
-    setIsAiAnalyzing(false); // AI 抓取結束，開始滾動動畫
+    setIsAiAnalyzing(false);
 
-    // 2. 執行滾動動畫
     let intervalId;
     const duration = 800;
     const startTime = Date.now();
@@ -119,7 +114,6 @@ const App = () => {
     const updateNumbers = () => {
       const now = Date.now();
       
-      // 動畫期間顯示隨機亂數
       if (gameType === 'superLotto') {
         setNumbers(generateUniqueNumbers(6, 1, 38));
         setSpecialNumber(Math.floor(Math.random() * 8) + 1);
@@ -137,16 +131,12 @@ const App = () => {
         clearInterval(intervalId);
         setIsRolling(false);
         
-        // 3. 最終定案
         if (mode === 'ai' && aiResult) {
-          // 使用 AI 推薦號碼
           setNumbers(aiResult.aiRecommendation);
-          // 威力彩特別號 AI 暫時隨機 (API 可擴充)
           if (gameType === 'superLotto') {
              setSpecialNumber(Math.floor(Math.random() * 8) + 1);
           }
         } else {
-          // 使用本機隨機號碼 (或是 AI 失敗的 Fallback)
           finalizeRandomNumbers();
         }
       }
@@ -200,22 +190,76 @@ const App = () => {
     </div>
   );
 
-  // --- 載入畫面 ---
+  // --- 載入畫面 (使用 Inline Styles 解決無樣式閃爍問題) ---
+  // 注意：這裡完全不使用 Tailwind classes，確保在 CSS 載入前就能正確顯示
   if (isLoading) {
     return (
-      <div className="fixed inset-0 bg-gradient-to-br from-indigo-800 to-indigo-600 flex flex-col justify-center items-center z-50 text-white font-sans">
-        <div className="relative mb-6">
-           <div className="flex gap-4 items-end">
-             <div className="w-8 h-8 bg-teal-400 rounded-full animate-bounce shadow-lg shadow-teal-500/50" style={{ animationDelay: '0ms', animationDuration: '0.6s' }}></div>
-             <div className="w-8 h-8 bg-yellow-400 rounded-full animate-bounce shadow-lg shadow-yellow-500/50" style={{ animationDelay: '150ms', animationDuration: '0.6s' }}></div>
-             <div className="w-8 h-8 bg-pink-500 rounded-full animate-bounce shadow-lg shadow-pink-500/50" style={{ animationDelay: '300ms', animationDuration: '0.6s' }}></div>
+      <div style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: 'linear-gradient(135deg, #3730a3, #4f46e5)', // 近似 indigo-800 到 indigo-600
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 9999,
+        color: 'white',
+        fontFamily: 'system-ui, -apple-system, sans-serif'
+      }}>
+        {/* 定義 Keyframes */}
+        <style dangerouslySetInnerHTML={{__html: `
+          @keyframes custom-bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-15px); }
+          }
+          @keyframes custom-pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+          }
+        `}} />
+        
+        <div style={{ position: 'relative', marginBottom: '1.5rem' }}>
+           <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end' }}>
+             {/* 綠球 */}
+             <div style={{ 
+               width: '2rem', height: '2rem', backgroundColor: '#2dd4bf', borderRadius: '50%', 
+               boxShadow: '0 4px 6px -1px rgba(45, 212, 191, 0.5)',
+               animation: 'custom-bounce 0.6s infinite ease-in-out', animationDelay: '0ms' 
+             }}></div>
+             {/* 黃球 */}
+             <div style={{ 
+               width: '2rem', height: '2rem', backgroundColor: '#facc15', borderRadius: '50%', 
+               boxShadow: '0 4px 6px -1px rgba(250, 204, 21, 0.5)',
+               animation: 'custom-bounce 0.6s infinite ease-in-out', animationDelay: '150ms' 
+             }}></div>
+             {/* 紅球 */}
+             <div style={{ 
+               width: '2rem', height: '2rem', backgroundColor: '#ec4899', borderRadius: '50%', 
+               boxShadow: '0 4px 6px -1px rgba(236, 72, 153, 0.5)',
+               animation: 'custom-bounce 0.6s infinite ease-in-out', animationDelay: '300ms' 
+             }}></div>
            </div>
-           <div className="absolute -bottom-2 left-0 w-full h-1 bg-black/20 blur-sm rounded-[100%]"></div>
+           {/* 陰影 */}
+           <div style={{ 
+             position: 'absolute', bottom: '-0.5rem', left: 0, width: '100%', height: '4px', 
+             backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: '50%', filter: 'blur(4px)' 
+           }}></div>
         </div>
-        <h2 className="text-3xl font-bold tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-teal-200 via-yellow-200 to-pink-200 drop-shadow-sm">
+
+        <h2 style={{ 
+          fontSize: '1.875rem', fontWeight: 'bold', letterSpacing: '0.1em', 
+          textShadow: '0 2px 4px rgba(0,0,0,0.2)', marginBottom: '0.5rem'
+        }}>
           台灣幸運選號王
         </h2>
-        <p className="mt-3 text-indigo-100/80 text-sm tracking-wider animate-pulse font-light">
+        
+        <p style={{ 
+          color: 'rgba(224, 231, 255, 0.9)', fontSize: '0.875rem', letterSpacing: '0.05em', 
+          animation: 'custom-pulse 2s infinite ease-in-out' 
+        }}>
           正在準備您的幸運號碼...
         </p>
       </div>
