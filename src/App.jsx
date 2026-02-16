@@ -292,7 +292,7 @@ const App = () => {
              <div style={{ width: '2rem', height: '2rem', backgroundColor: '#ec4899', borderRadius: '50%', boxShadow: '0 4px 6px -1px rgba(236, 72, 153, 0.5)', animation: 'custom-bounce 0.6s infinite ease-in-out', animationDelay: '300ms' }}></div>
            </div>
         </div>
-        <h2 style={{ fontSize: '1.875rem', fontWeight: 'bold', letterSpacing: '0.1em', marginBottom: '0.5rem' }}>台灣幸運選號王</h2>
+        <h2 style={{ fontSize: '1.875rem', fontWeight: 'bold', letterSpacing: '0.1em', marginBottom: '0.5rem' }}>彩券選號王</h2>
         <p style={{ color: 'rgba(224, 231, 255, 0.9)', fontSize: '0.875rem', animation: 'custom-pulse 2s infinite ease-in-out' }}>正在準備您的幸運號碼...</p>
       </div>
     );
@@ -322,7 +322,7 @@ const App = () => {
           <div className="relative z-10">
             <h1 className="text-2xl sm:text-4xl font-bold text-white flex items-center justify-center gap-2 sm:gap-3">
               <Trophy className="w-6 h-6 sm:w-10 sm:h-10 text-yellow-300" />
-              台灣幸運選號王
+              彩券選號王
             </h1>
             <div className="flex items-center justify-center gap-2 mt-2">
               <p className="text-indigo-200 text-xs sm:text-sm">
