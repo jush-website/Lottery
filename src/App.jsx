@@ -18,7 +18,7 @@ const App = () => {
   // --- 自動載入 Tailwind CSS ---
   useEffect(() => {
     const existingScript = document.querySelector('script[src*="tailwindcss"]');
-    const handleLoadComplete = () => setTimeout(() => setIsLoading(false), 500);
+    const handleLoadComplete = () => setTimeout(() => setIsLoading(false), 800); // 稍微延長一點點欣賞動畫
 
     if (existingScript) {
       handleLoadComplete();
@@ -203,10 +203,21 @@ const App = () => {
   // --- 載入畫面 ---
   if (isLoading) {
     return (
-      <div className="fixed inset-0 bg-indigo-600 flex flex-col justify-center items-center z-50 text-white font-sans">
-        <div className="w-12 h-12 border-4 border-white/30 border-t-white rounded-full animate-spin mb-4"></div>
-        <h2 className="text-2xl font-bold tracking-widest">台灣幸運選號王</h2>
-        <p className="mt-2 opacity-80 text-sm">系統啟動中...</p>
+      <div className="fixed inset-0 bg-gradient-to-br from-indigo-800 to-indigo-600 flex flex-col justify-center items-center z-50 text-white font-sans">
+        <div className="relative mb-6">
+           <div className="flex gap-4 items-end">
+             <div className="w-8 h-8 bg-teal-400 rounded-full animate-bounce shadow-lg shadow-teal-500/50" style={{ animationDelay: '0ms', animationDuration: '0.6s' }}></div>
+             <div className="w-8 h-8 bg-yellow-400 rounded-full animate-bounce shadow-lg shadow-yellow-500/50" style={{ animationDelay: '150ms', animationDuration: '0.6s' }}></div>
+             <div className="w-8 h-8 bg-pink-500 rounded-full animate-bounce shadow-lg shadow-pink-500/50" style={{ animationDelay: '300ms', animationDuration: '0.6s' }}></div>
+           </div>
+           <div className="absolute -bottom-2 left-0 w-full h-1 bg-black/20 blur-sm rounded-[100%]"></div>
+        </div>
+        <h2 className="text-3xl font-bold tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-teal-200 via-yellow-200 to-pink-200 drop-shadow-sm">
+          台灣幸運選號王
+        </h2>
+        <p className="mt-3 text-indigo-100/80 text-sm tracking-wider animate-pulse font-light">
+          正在準備您的幸運號碼...
+        </p>
       </div>
     );
   }
