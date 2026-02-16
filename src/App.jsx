@@ -324,10 +324,7 @@ const App = () => {
                  src="lottery.jpg" 
                  alt="幸運招財貓" 
                  className="w-full h-full object-cover rounded-full"
-                 onError={(e) => {
-                   e.target.onerror = null;
-                   // 備用圖片：使用網路上公開的招財貓 icon，確保預覽不破圖
-                   e.target.src = "https://cdn-icons-png.flaticon.com/512/616/616430.png";
+                 
                  }}
                />
             </div>
