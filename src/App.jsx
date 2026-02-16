@@ -9,6 +9,17 @@ const App = () => {
   const [scratchCovered, setScratchCovered] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
 
+  // --- 自動載入 Tailwind CSS (修復樣式遺失問題) ---
+  useEffect(() => {
+    // 檢查是否已經有 Tailwind，如果沒有則動態插入 CDN
+    if (!document.querySelector('script[src*="tailwindcss"]')) {
+      const script = document.createElement('script');
+      script.src = "https://cdn.tailwindcss.com";
+      script.async = true;
+      document.head.appendChild(script);
+    }
+  }, []);
+
   // 偵測裝置尺寸
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 640);
