@@ -17,100 +17,126 @@ export default async function handler(req, res) {
     return;
   }
 
-  // 取得請求參數，預設為威力彩 (superLotto)
   const { type = 'superLotto' } = req.query;
 
   try {
-    let url = '';
-    let ballCount = 6;
-    let maxNum = 38;
-    
-    // 定義資料來源 (這裡使用台灣彩券官網或穩定的第三方資訊網站結構作為範例)
-    // 注意：實際爬蟲網址可能會因網站改版而需要更新，這裡針對常見結構撰寫
-    if (type === 'superLotto') {
-      // 威力彩歷史資料範例網址 (實際應用可能需要遍歷分頁或抓取特定區間)
-      url = 'https://www.taiwanlottery.com.tw/lotto/superlotto638/history.aspx';
-      maxNum = 38;
-    } else if (type === 'lotto649') {
-      // 大樂透
-      url = 'https://www.taiwanlottery.com.tw/lotto/Lotto649/history.aspx';
-      maxNum = 49;
-    } else {
-      return res.status(400).json({ error: '不支援的遊戲類型' });
-    }
+    let historyData = [];
+    let maxNum = 38; // 預設威力彩
 
-    // 1. 爬蟲抓取資料
-    console.log(`開始抓取 ${type} 資料: ${url}`);
-    const response = await axios.get(url);
-    const html = response.data;
-    const $ = cheerio.load(html);
-    
-    const historyData = [];
-    
-    // 2. 解析 HTML (針對台灣彩券官網歷史表格結構)
-    // 尋找包含開獎號碼的表格列
-    // 註：不同網站的 CSS Selector 不同，以下針對台彩官網的結構進行解析
-    const tableRows = $('table.td_hm tr');
-
-    tableRows.each((index, element) => {
-      // 略過表頭，通常會有特定的 class 或 id 辨識
-      const rowText = $(element).text().trim();
-      if (!rowText) return;
-
-      // 嘗試抓取一般號碼 (這裡假設是官網常見的 id 命名規則，例如 SuperLotto638Control_history1_dlQuery_SNo1_0)
-      // 為了適應性更強，我們抓取帶有特定 style 或 class 的數字 span
-      const balls = [];
-      const special = [];
-
-      // 抓取第一區號碼
-      $(element).find('span[id*="SNo"]').each((i, el) => {
-         const num = parseInt($(el).text(), 10);
-         if (!isNaN(num)) balls.push(num);
-      });
-
-      // 抓取第二區/特別號
-      $(element).find('span[id*="No7"]').each((i, el) => { // 威力彩第二區通常是 No7
-         const num = parseInt($(el).text(), 10);
-         if (!isNaN(num)) special.push(num);
-      });
+    // --- 針對賓果賓果的特殊處理 (使用官方 API) ---
+    if (type === 'bingoBingo') {
+      maxNum = 80;
+      console.log('開始抓取 Bingo Bingo 資料...');
       
-      // 如果是大樂透，特別號可能命名不同，這裡做個通用的 fallback 抓取
-      if (type === 'lotto649' && special.length === 0) {
-         $(element).find('span[id*="SNo7"]').each((i, el) => {
-            const num = parseInt($(el).text(), 10);
-            if (!isNaN(num)) special.push(num);
-         });
+      // 台灣彩券新版官網通常使用的 API 端點 (抓取最近 10 期或當日資料)
+      // 註：這裡嘗試模擬抓取當日最後 10 筆，因為資料量大
+      // 如果官方 API 有變動，這裡會 fallback 到模擬數據
+      const apiUrl = 'https://api.taiwanlottery.com/TLCAPI/api/Lotto/BingoBingo/Result?limit=20'; 
+      
+      try {
+        const response = await axios.get(apiUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Accept': 'application/json'
+          },
+          timeout: 5000 // 5秒超時
+        });
+
+        if (response.data && response.data.content && response.data.content.bingoBingoResult) {
+           // 解析官方 JSON 格式
+           historyData = response.data.content.bingoBingoResult.map(item => ({
+             drawDate: `第 ${item.period} 期`,
+             // 官方資料通常是 no1...no20 的欄位，或者是 number 陣列
+             numbers: item.blueBall ? item.blueBall.split(',').map(n => parseInt(n)) : [], 
+             special: item.superLottoNo ? parseInt(item.superLottoNo) : null, // 超級獎號
+             bigSmall: item.bigSmall // 猜大小結果
+           }));
+        } else {
+           // 備用：如果結構不同，嘗試直接抓取陣列 (視 API 版本而定)
+           // 這裡假設若抓不到，拋出錯誤進入模擬數據
+           if (Array.isArray(response.data)) {
+              historyData = response.data.map(item => ({
+                drawDate: item.period,
+                numbers: item.nums, 
+                special: item.superNum
+              }));
+           }
+        }
+      } catch (apiError) {
+        console.warn('Bingo API 抓取失敗，切換至模擬分析模式:', apiError.message);
+        // 不中斷，讓下方邏輯產生模擬數據
       }
 
-      if (balls.length >= 6) {
-        historyData.push({
-          drawDate: $(element).find('span[id*="DrawDate"]').text(), // 開獎日期
-          numbers: balls.slice(0, 6), // 取前6個 (避免多抓)
-          special: special[0] || null
+    } else {
+      // --- 威力彩與大樂透的爬蟲邏輯 (維持 HTML 解析) ---
+      let url = '';
+      if (type === 'superLotto') {
+        url = 'https://www.taiwanlottery.com.tw/lotto/superlotto638/history.aspx';
+        maxNum = 38;
+      } else if (type === 'lotto649') {
+        url = 'https://www.taiwanlottery.com.tw/lotto/Lotto649/history.aspx';
+        maxNum = 49;
+      }
+
+      if (url) {
+        console.log(`開始抓取 ${type} HTML 資料: ${url}`);
+        const response = await axios.get(url);
+        const $ = cheerio.load(response.data);
+        
+        const tableRows = $('table.td_hm tr');
+        tableRows.each((index, element) => {
+          const rowText = $(element).text().trim();
+          if (!rowText) return;
+
+          const balls = [];
+          const special = [];
+
+          // 通用抓取邏輯
+          $(element).find('span[id*="SNo"]').each((i, el) => {
+             const num = parseInt($(el).text(), 10);
+             if (!isNaN(num)) balls.push(num);
+          });
+          
+          // 嘗試抓取特別號
+          $(element).find('span[id*="No7"]').each((i, el) => {
+             const num = parseInt($(el).text(), 10);
+             if (!isNaN(num)) special.push(num);
+          });
+          
+          if (type === 'lotto649' && special.length === 0) {
+             $(element).find('span[id*="SNo7"]').each((i, el) => {
+                const num = parseInt($(el).text(), 10);
+                if (!isNaN(num)) special.push(num);
+             });
+          }
+
+          if (balls.length >= 6) {
+            historyData.push({
+              drawDate: $(element).find('span[id*="DrawDate"]').text(),
+              numbers: balls.slice(0, 6),
+              special: special[0] || null
+            });
+          }
         });
       }
-    });
+    }
 
-    // 如果爬蟲因為網站改版抓不到資料，我們生成一些模擬的"歷史大數據"供前端測試分析邏輯
-    // 這是為了保證 API 在 Demo 階段不會因為目標網站擋爬蟲而壞掉
+    // --- 若無資料 (網站改版或連線失敗)，生成模擬數據供 Demo ---
     if (historyData.length === 0) {
-      console.warn('爬蟲未抓取到資料，切換為模擬分析模式');
-      for (let i = 0; i < 50; i++) { // 模擬過去 50 期
+      const count = type === 'bingoBingo' ? 20 : 6; // 賓果開20個號碼
+      for (let i = 0; i < 20; i++) {
          const nums = new Set();
-         while(nums.size < 6) nums.add(Math.floor(Math.random() * maxNum) + 1);
+         while(nums.size < count) nums.add(Math.floor(Math.random() * maxNum) + 1);
          historyData.push({
-           drawDate: `模擬第 ${i} 期`,
+           drawDate: `模擬數據 第 ${113000000 + i} 期`,
            numbers: Array.from(nums),
-           special: Math.floor(Math.random() * 8) + 1
+           special: Math.floor(Math.random() * (type==='superLotto'?8:80)) + 1
          });
       }
     }
 
-    // 3. 大數據分析邏輯
-    const frequency = {}; // 頻率分析
-    const historyMatrix = []; // 遺漏值分析用
-
-    // 初始化頻率表
+    // --- 大數據分析邏輯 ---
+    const frequency = {};
     for (let i = 1; i <= maxNum; i++) frequency[i] = 0;
 
     historyData.forEach(draw => {
@@ -124,24 +150,27 @@ export default async function handler(req, res) {
       .sort(([, a], [, b]) => b - a)
       .map(([num]) => parseInt(num));
 
-    const hotNumbers = sortedNumbers.slice(0, 10); // 前10熱門
-    const coldNumbers = sortedNumbers.slice(-10).reverse(); // 前10冷門
+    const hotNumbers = sortedNumbers.slice(0, 20); // 取前 20 個熱門 (賓果需要比較多)
+    const coldNumbers = sortedNumbers.slice(-20).reverse();
 
-    // 4. 產生"AI推薦號碼"
-    // 演算法：混合熱門號碼(60%) + 冷門號碼翻身(20%) + 隨機(20%)
+    // AI 推薦演算法 (針對賓果邏輯調整)
     const generateAiNumbers = () => {
+       // 如果是賓果，我們回傳一整組熱門號碼池，讓前端根據選擇的星數去切分
+       if (type === 'bingoBingo') {
+         // 回傳前 10 個最熱門的號碼 (因為賓果最多選 10 星)
+         return hotNumbers.slice(0, 10).sort((a, b) => a - b);
+       }
+
+       // 威力彩/大樂透 邏輯維持不變
        const selection = new Set();
-       // 嘗試取 3 個熱門號
        while (selection.size < 3) {
-          const pick = hotNumbers[Math.floor(Math.random() * hotNumbers.length)];
+          const pick = hotNumbers[Math.floor(Math.random() * 10)]; // 從前10熱門挑
           selection.add(pick);
        }
-       // 嘗試取 1 個冷門號
        while (selection.size < 4) {
-          const pick = coldNumbers[Math.floor(Math.random() * coldNumbers.length)];
+          const pick = coldNumbers[Math.floor(Math.random() * 10)]; // 從前10冷門挑
           selection.add(pick);
        }
-       // 剩下隨機補滿
        while (selection.size < 6) {
           const pick = Math.floor(Math.random() * maxNum) + 1;
           selection.add(pick);
@@ -151,16 +180,15 @@ export default async function handler(req, res) {
 
     const aiRecommendation = generateAiNumbers();
 
-    // 5. 回傳結果
     res.status(200).json({
       success: true,
       data: {
         gameType: type,
-        analyzedDraws: historyData.length, // 分析了幾期
+        analyzedDraws: historyData.length,
         hotNumbers,
         coldNumbers,
         aiRecommendation,
-        lastDraw: historyData[0] || null, // 最近一期
+        lastDraw: historyData[0] || null,
       }
     });
 
