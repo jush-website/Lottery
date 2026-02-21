@@ -1,16 +1,17 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Sparkles, CircleDollarSign, Ticket, RefreshCw, Trophy, Smartphone, Monitor, Brain, Flame, Snowflake, Download, LayoutGrid, Calculator, Coins } from 'lucide-react';
+import { Sparkles, CircleDollarSign, Ticket, RefreshCw, Trophy, Smartphone, Monitor, Brain, Flame, Snowflake, Download, LayoutGrid, Calculator, Coins, History } from 'lucide-react';
 
 const App = () => {
   const [gameType, setGameType] = useState('superLotto');
   const [numbers, setNumbers] = useState([]);
   const [specialNumber, setSpecialNumber] = useState(null);
   
-  // 賓果相關狀態 (新版：手動控制)
-  const [extraInfo, setExtraInfo] = useState(null); // 猜大小結果
-  const [bingoStars, setBingoStars] = useState(5); // 預設 5 星
-  const [bingoMultiplier, setBingoMultiplier] = useState(1); // 倍率
-  const [bingoSuper, setBingoSuper] = useState(false); // 超級獎號
+  // 賓果相關狀態 (加入期數)
+  const [extraInfo, setExtraInfo] = useState(null); 
+  const [bingoStars, setBingoStars] = useState(5); 
+  const [bingoMultiplier, setBingoMultiplier] = useState(1); 
+  const [bingoSuper, setBingoSuper] = useState(false); 
+  const [bingoBetPeriods, setBingoBetPeriods] = useState(1); // 新增：連續投注期數 (1~12)
   
   const [isRolling, setIsRolling] = useState(false);
   const [scratchStates, setScratchStates] = useState([]); 
@@ -144,8 +145,8 @@ const App = () => {
 
   const fetchAiNumbers = async () => {
     try {
-      // 呼叫後端 API 抓取資料
-      const apiUrl = `/api/analyze-lottery?type=${gameType}`;
+      // 加上 periods=50 強制回溯近50期(或API上限)，進行大數據全盤分析
+      const apiUrl = `/api/analyze-lottery?type=${gameType}&periods=50`;
       const res = await fetch(apiUrl);
       const json = await res.json();
       
@@ -160,11 +161,11 @@ const App = () => {
     }
   };
 
-  // 計算賓果賓果成本
+  // 計算賓果賓果成本 (基本價 + 超級獎號) * 倍數 * 期數
   const calculateBingoCost = () => {
     const basePrice = 25;
     const superPrice = bingoSuper ? 25 : 0;
-    return (basePrice + superPrice) * (bingoMultiplier || 1);
+    return (basePrice + superPrice) * (bingoMultiplier || 1) * (bingoBetPeriods || 1);
   };
 
   const handleGenerate = useCallback(async (mode = 'random') => {
@@ -194,7 +195,8 @@ const App = () => {
           hot: aiResult.hotNumbers,
           cold: aiResult.coldNumbers,
           lastDraw: aiResult.lastDraw,
-          aiRecommendation: aiResult.aiRecommendation
+          aiRecommendation: aiResult.aiRecommendation,
+          analyzedDraws: aiResult.analyzedDraws // 記錄實際回溯了幾期
         });
       }
     }
@@ -235,10 +237,9 @@ const App = () => {
         if (mode === 'ai' && aiResult) {
           if (gameType === 'bingoBingo') {
             // 賓果 AI: 根據使用者選的星數，從熱門號碼中截取
-            // aiRecommendation 已經是 API 排好序的熱門號碼 (例如前10熱門)
             const recommended = aiResult.aiRecommendation.slice(0, bingoStars).sort((a, b) => a - b);
             
-            // 如果熱門號碼數量不足 (例如API只回傳了5個但使用者選10星)，用隨機補足
+            // 如果熱門號碼數量不足，用隨機補足
             if (recommended.length < bingoStars) {
                 const existing = new Set(recommended);
                 while(existing.size < bingoStars) {
@@ -249,7 +250,7 @@ const App = () => {
                 setNumbers(recommended);
             }
 
-            // 超級獎號 AI: 暫時隨機 (或可改為取熱門榜第 20 名)
+            // 超級獎號 AI: 暫時隨機
             if (bingoSuper) setSpecialNumber(Math.floor(Math.random() * 80) + 1);
             
             // 猜大小: 可以根據 API 的 lastDraw 做趨勢判斷，這裡暫時隨機
@@ -270,7 +271,7 @@ const App = () => {
     };
 
     intervalId = setInterval(updateNumbers, 50);
-  }, [gameType, bingoStars, bingoSuper, bingoMultiplier]);
+  }, [gameType, bingoStars, bingoSuper, bingoMultiplier, bingoBetPeriods]);
 
   const finalizeRandomNumbers = () => {
     if (gameType === 'superLotto') {
@@ -444,7 +445,9 @@ const App = () => {
               <div className="flex items-center gap-2 mb-2">
                 <Brain className="w-4 h-4 text-indigo-600" />
                 <h3 className="text-sm font-bold text-indigo-800">
-                  {gameType === 'bingoBingo' ? '今日熱門數據分析' : '大數據分析結果'}
+                  {gameType === 'bingoBingo' 
+                    ? `回溯近 ${analysisData.analyzedDraws || '50'} 期大數據分析` 
+                    : '大數據分析結果'}
                 </h3>
                 <span className="text-xs text-gray-500 ml-auto">{analysisData.lastDraw ? `更新至: ${analysisData.lastDraw.drawDate}` : '模擬數據分析'}</span>
               </div>
@@ -521,17 +524,17 @@ const App = () => {
             </div>
           )}
 
-          {/* 賓果賓果顯示區 (新版) */}
+          {/* 賓果賓果顯示區 (新版: 結合期數與倍數) */}
           {gameType === 'bingoBingo' && (
             <div className="w-full text-center animate-fade-in">
               {/* 控制面板 */}
-              <div className="bg-white border border-orange-200 rounded-2xl p-4 mb-6 max-w-xl mx-auto shadow-sm text-left">
+              <div className="bg-white border border-orange-200 rounded-2xl p-4 mb-6 max-w-2xl mx-auto shadow-sm text-left">
                 <h3 className="font-bold text-orange-900 mb-4 flex items-center gap-2 text-sm sm:text-base">
                   <Calculator className="w-5 h-5" /> 玩法設定與試算
                 </h3>
                 
                 {/* 星數選擇 */}
-                <div className="mb-4">
+                <div className="mb-5">
                   <label className="text-xs text-gray-500 font-bold mb-2 block">選擇星數 (玩法)</label>
                   <div className="flex flex-wrap gap-2">
                     {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(star => (
@@ -550,33 +553,60 @@ const App = () => {
                   </div>
                 </div>
 
-                {/* 倍率與超級獎號 */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-                  <div>
-                    <label className="text-xs text-gray-500 font-bold mb-2 block">購買倍數</label>
-                    <div className="flex items-center gap-2">
+                {/* 倍率、期數與超級獎號 Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5">
+                  {/* 倍率 */}
+                  <div className="bg-gray-50 p-3 rounded-xl border border-gray-100 flex flex-col justify-between">
+                    <label className="text-xs text-gray-500 font-bold mb-2 flex items-center gap-1">
+                      購買倍數
+                    </label>
+                    <div className="flex items-center justify-between gap-1">
                       <button 
                         onClick={() => setBingoMultiplier(Math.max(1, bingoMultiplier - 1))}
-                        className="w-10 h-10 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center font-bold text-gray-600 transition-colors"
+                        className="w-8 h-8 rounded-lg bg-white shadow-sm hover:bg-gray-100 flex items-center justify-center font-bold text-gray-600 transition-colors"
                       >-</button>
                       <input 
                         type="number" 
                         value={bingoMultiplier}
                         onChange={(e) => setBingoMultiplier(Math.max(1, parseInt(e.target.value) || 1))}
-                        className="w-20 text-center border-b-2 border-orange-200 focus:border-orange-500 outline-none font-bold text-lg bg-transparent"
+                        className="w-12 text-center border-b-2 border-orange-200 focus:border-orange-500 outline-none font-bold text-lg bg-transparent"
                       />
                       <button 
                         onClick={() => setBingoMultiplier(bingoMultiplier + 1)}
-                        className="w-10 h-10 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center font-bold text-gray-600 transition-colors"
+                        className="w-8 h-8 rounded-lg bg-white shadow-sm hover:bg-gray-100 flex items-center justify-center font-bold text-gray-600 transition-colors"
+                      >+</button>
+                    </div>
+                  </div>
+
+                  {/* 連續期數 (1~12) */}
+                  <div className="bg-gray-50 p-3 rounded-xl border border-gray-100 flex flex-col justify-between">
+                    <label className="text-xs text-gray-500 font-bold mb-2 flex items-center gap-1">
+                      <History className="w-3 h-3" /> 連續期數
+                    </label>
+                    <div className="flex items-center justify-between gap-1">
+                      <button 
+                        onClick={() => setBingoBetPeriods(Math.max(1, bingoBetPeriods - 1))}
+                        className="w-8 h-8 rounded-lg bg-white shadow-sm hover:bg-gray-100 flex items-center justify-center font-bold text-gray-600 transition-colors"
+                      >-</button>
+                      <input 
+                        type="number" 
+                        value={bingoBetPeriods}
+                        onChange={(e) => setBingoBetPeriods(Math.min(12, Math.max(1, parseInt(e.target.value) || 1)))}
+                        className="w-12 text-center border-b-2 border-orange-200 focus:border-orange-500 outline-none font-bold text-lg bg-transparent"
+                      />
+                      <button 
+                        onClick={() => setBingoBetPeriods(Math.min(12, bingoBetPeriods + 1))}
+                        className="w-8 h-8 rounded-lg bg-white shadow-sm hover:bg-gray-100 flex items-center justify-center font-bold text-gray-600 transition-colors"
                       >+</button>
                     </div>
                   </div>
                   
-                  <div>
+                  {/* 附加玩法 */}
+                  <div className="flex flex-col justify-end">
                     <label className="text-xs text-gray-500 font-bold mb-2 block">附加玩法</label>
                     <button
                       onClick={() => setBingoSuper(!bingoSuper)}
-                      className={`w-full sm:w-auto px-4 py-2.5 rounded-lg text-sm font-bold border transition-all flex items-center justify-center gap-2 ${
+                      className={`w-full px-3 py-3 rounded-xl text-sm font-bold border transition-all flex items-center justify-center gap-2 h-full ${
                         bingoSuper 
                           ? 'bg-purple-100 text-purple-700 border-purple-300 shadow-sm' 
                           : 'bg-gray-50 text-gray-400 border-gray-200'
@@ -585,33 +615,40 @@ const App = () => {
                       <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${bingoSuper ? 'bg-purple-500 border-purple-500' : 'border-gray-400'}`}>
                         {bingoSuper && <div className="w-2 h-2 bg-white rounded-sm"></div>}
                       </div>
-                      加購超級獎號 (+25元)
+                      超級獎號 (+25)
                     </button>
                   </div>
                 </div>
 
                 {/* 總金額試算 */}
-                <div className="bg-orange-50 p-3 rounded-xl flex justify-between items-center border border-orange-100">
-                  <span className="text-orange-800 text-sm font-bold">預估投注金額</span>
-                  <div className="text-xl font-black text-orange-600 flex items-center gap-1">
-                    <Coins className="w-5 h-5" /> ${calculateBingoCost()}
+                <div className="bg-orange-50 p-4 rounded-xl flex justify-between items-center border border-orange-100">
+                  <div className="flex flex-col">
+                    <span className="text-orange-800 text-sm font-bold">預估投注總金額</span>
+                    <span className="text-xs text-orange-600/70">
+                      ({bingoSuper ? '50' : '25'}元 × {bingoMultiplier}倍 × {bingoBetPeriods}期)
+                    </span>
+                  </div>
+                  <div className="text-2xl font-black text-orange-600 flex items-center gap-1">
+                    <Coins className="w-6 h-6" /> ${calculateBingoCost()}
                   </div>
                 </div>
               </div>
 
               <div className="mb-4 text-orange-900 font-semibold bg-orange-100 inline-block px-4 py-1.5 rounded-full text-xs sm:text-sm shadow-sm">
-                01 ~ 80 任選 {bingoStars} 碼 ({bingoStars}星)
+                本次投注: {bingoStars} 星玩法 / 連續 {bingoBetPeriods} 期
               </div>
               
               {/* 主選號區 */}
               <div className="flex flex-wrap justify-center gap-2 sm:gap-4 max-w-3xl mx-auto mb-6 min-h-[60px]">
                 {numbers.length > 0 ? (
-                  numbers.map((num, idx) => (
-                    <LottoBall key={idx} num={num} size="small" colorClass="bg-gradient-to-br from-orange-400 to-orange-600 shadow-orange-200" />
-                  ))
+                  numbers.map((num, idx) => {
+                    const isHot = analysisData?.hot.includes(num);
+                    const isCold = analysisData?.cold.includes(num);
+                    return <LottoBall key={idx} num={num} size="small" colorClass="bg-gradient-to-br from-orange-400 to-orange-600 shadow-orange-200" isHot={isHot} isCold={isCold}/>;
+                  })
                 ) : (
                   <div className="text-gray-400 italic py-8 text-sm sm:text-base w-full flex flex-col items-center gap-2">
-                    <p>調整上方設定，開始選號！</p>
+                    <p>調整上方設定，點擊選號按鈕！</p>
                   </div>
                 )}
               </div>
@@ -633,7 +670,7 @@ const App = () => {
                   <div className="hidden sm:block w-px h-16 bg-gray-200"></div>
 
                   <div className="flex flex-col items-center">
-                     <div className="mb-2 text-blue-900 font-bold text-xs sm:text-sm">猜大小 (參考)</div>
+                     <div className="mb-2 text-blue-900 font-bold text-xs sm:text-sm">猜大小 (機率參考)</div>
                      <div className={`
                        w-16 h-16 sm:w-20 sm:h-20 rounded-xl flex items-center justify-center text-3xl sm:text-4xl font-black text-white shadow-lg transform transition-all duration-500
                        ${extraInfo === '大' ? 'bg-gradient-to-br from-red-500 to-rose-600' : extraInfo === '小' ? 'bg-gradient-to-br from-blue-500 to-cyan-600' : 'bg-gray-300'}
@@ -708,7 +745,7 @@ const App = () => {
             {(isRolling && !useAi) ? '選號中...' : '隨機選號'}
           </button>
 
-          {/* AI 按鈕 - 賓果現在也顯示 AI (使用熱門號) */}
+          {/* AI 按鈕 */}
           {gameType !== 'scratch' && (
             <button
               onClick={() => handleGenerate('ai')}
@@ -722,18 +759,18 @@ const App = () => {
               {isAiAnalyzing ? (
                 <>
                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                   抓取今日數據...
+                   回溯並分析數據中...
                 </>
               ) : (
                 <>
                   <Brain className="w-5 h-5" />
-                  {gameType === 'bingoBingo' ? '今日熱門選號' : 'AI 大數據選號'}
+                  {gameType === 'bingoBingo' ? '今日熱門選號 (大數據)' : 'AI 大數據選號'}
                 </>
               )}
             </button>
           )}
           
-          {/* 刮刮樂 模式下的特殊樣式主按鈕 */}
+          {/* 刮刮樂 模式 */}
           {(gameType === 'scratch') && (
              <button
              onClick={() => handleGenerate('random')}
