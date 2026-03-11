@@ -46,7 +46,7 @@ export default async function handler(req, res) {
 
         if (response.data?.content?.bingoBingoResult) {
            historyData = response.data.content.bingoBingoResult.map(item => ({
-             drawDate: `第 ${item.period} 期`,
+             drawDate: `第 ${item.period} 期`, // 這裡包含完整的期數號碼
              numbers: item.blueBall ? item.blueBall.split(',').map(n => parseInt(n)) : [], 
              special: item.superLottoNo ? parseInt(item.superLottoNo) : null,
              bigSmall: item.bigSmall
@@ -96,7 +96,8 @@ export default async function handler(req, res) {
          const nums = new Set();
          while(nums.size < count) nums.add(Math.floor(Math.random() * maxNum) + 1);
          historyData.push({
-           drawDate: `模擬 第 ${113000000 + i} 期`,
+           // 模擬產生遞減的期數 (新 -> 舊)
+           drawDate: `模擬 第 ${115014200 - i} 期`,
            numbers: Array.from(nums),
            special: Math.floor(Math.random() * (type === 'superLotto' ? 8 : 80)) + 1
          });
@@ -166,9 +167,10 @@ export default async function handler(req, res) {
         gameType: type,
         analyzedDraws: historyData.length,
         hotNumbers: hotNumbers.slice(0, 10),  // 傳回前10名常出現
-        coldNumbers: coldNumbers.slice(0, 10), // 傳回前10名未出現
+        coldNumbers: coldNumbers.slice(0, 10), // 傳回前10名未出現/極少出現
         aiRecommendation: generateAiNumbers(),
-        lastDraw: historyData[0] || null,
+        lastDraw: historyData[0] || null, // 最新一期
+        firstDraw: historyData[historyData.length - 1] || null // 最舊一期 (用來顯示區間)
       }
     });
 
