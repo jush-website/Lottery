@@ -6,7 +6,7 @@ const App = () => {
   const [numbers, setNumbers] = useState([]);
   const [specialNumber, setSpecialNumber] = useState(null);
   
-  // 賓果相關狀態 (加入期數限制 2~12)
+  // 賓果相關狀態 (期數限制 2~12)
   const [extraInfo, setExtraInfo] = useState(null); 
   const [bingoStars, setBingoStars] = useState(5); 
   const [bingoMultiplier, setBingoMultiplier] = useState(1); 
@@ -28,7 +28,7 @@ const App = () => {
   // 內建金元寶 SVG (避免外部圖片破圖)
   const godOfWealthImg = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj48cGF0aCBmaWxsPSIjRkZDQzAwIiBkPSJNMjU2IDMyYy02MCAwLTEwMCA2MC0xMDAgMTIwIDAgNDAgMjAgODAgNjAgMTAwLTQwIDIwLTgwIDYwLTgwIDEwMHM0MCA4MCA4MCA4MGg4MGM0MCAwIDgwLTQwIDgwLTgwczQwLTgwLTgwLTEwMGM0MC0yMCA2MC02MCA2MC0xMDBDMzU2IDkyIDMxNiAzMiAyNTYgMzJ6bTAgNDAgYzQwIDAgNjAgNDAgNjAgODBzLTIwIDgwLTYwIDgwLTYwLTQwLTYwLTgwczIwLTgwIDYwLTgweiIvPjwvc3ZnPg==";
 
-  // --- 自動載入 Tailwind CSS ---
+  // --- 自動載入 Tailwind CSS (防畫面閃爍) ---
   useEffect(() => {
     const existingScript = document.querySelector('script[src*="tailwindcss"]');
     const handleLoadComplete = () => setTimeout(() => setIsLoading(false), 1200);
@@ -188,6 +188,7 @@ const App = () => {
           hot: aiResult.hotNumbers,
           cold: aiResult.coldNumbers,
           lastDraw: aiResult.lastDraw,
+          firstDraw: aiResult.firstDraw, // 取得最舊的一期，用於顯示區間
           aiRecommendation: aiResult.aiRecommendation,
           analyzedDraws: aiResult.analyzedDraws 
         });
@@ -312,7 +313,7 @@ const App = () => {
            </div>
         </div>
         <h2 style={{ fontSize: '1.875rem', fontWeight: 'bold', letterSpacing: '0.1em', marginBottom: '0.5rem' }}>台灣幸運選號王</h2>
-        <p style={{ color: 'rgba(224, 231, 255, 0.9)', fontSize: '0.875rem', animation: 'custom-pulse 2s infinite ease-in-out' }}>正在準備您的幸運號碼...</p>
+        <p style={{ color: 'rgba(224, 231, 255, 0.9)', fontSize: '0.875rem', animation: 'custom-pulse 2s infinite ease-in-out' }}>系統啟動中，請稍候...</p>
       </div>
     );
   }
@@ -365,7 +366,7 @@ const App = () => {
         {/* Main Content Area */}
         <div className="flex-grow p-4 sm:p-10 flex flex-col items-center justify-start sm:justify-center bg-gray-50/50 min-h-[50vh] sm:min-h-[300px]">
           
-          {/* AI 分析提示區 (加入區間顯示功能) */}
+          {/* AI 分析提示區 (含期數區間動態顯示) */}
           {useAi && analysisData && (
             <div className="w-full max-w-lg mb-6 bg-indigo-50 border border-indigo-200 rounded-xl p-3 sm:p-4 animate-fade-in">
               <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-3">
@@ -375,33 +376,39 @@ const App = () => {
                     大數據分析結果
                   </h3>
                 </div>
-                {/* 分析區間 Badge */}
+                
+                {/* 動態顯示分析的期數區間 */}
                 <div className="sm:ml-auto text-[10px] sm:text-xs text-indigo-700 bg-indigo-100/80 px-2.5 py-1.5 rounded-md font-bold border border-indigo-200 shadow-sm inline-block tracking-wide">
                   {(() => {
                     if (!analysisData.lastDraw) return '🔍 模擬數據';
-                    // 若是賓果賓果，精算期數區間
-                    if (gameType === 'bingoBingo') {
-                      const match = analysisData.lastDraw.drawDate.match(/\d+/);
-                      if (match) {
-                        const endPeriod = parseInt(match[0], 10);
-                        const count = analysisData.analyzedDraws;
-                        if (count > 1) {
-                          return `🔍 分析區間: ${endPeriod - count + 1} ~ ${endPeriod} 期`;
+                    
+                    if (analysisData.firstDraw && analysisData.lastDraw) {
+                      const startMatch = String(analysisData.firstDraw.drawDate).match(/\d+/);
+                      const endMatch = String(analysisData.lastDraw.drawDate).match(/\d+/);
+                      
+                      if (startMatch && endMatch) {
+                        const startNum = parseInt(startMatch[0], 10);
+                        const endNum = parseInt(endMatch[0], 10);
+                        const minNum = Math.min(startNum, endNum);
+                        const maxNum = Math.max(startNum, endNum);
+
+                        if (minNum === maxNum) {
+                          return `🔍 分析期數: 第 ${maxNum} 期`;
                         }
-                        return `🔍 分析期數: 第 ${endPeriod} 期`;
+                        return `🔍 分析區間: 第 ${minNum} ~ ${maxNum} 期`;
                       }
                     }
-                    // 威力彩/大樂透顯示更新日期
                     return `🔍 更新至: ${analysisData.lastDraw.drawDate}`;
                   })()}
                 </div>
               </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-white p-2 rounded-lg shadow-sm">
                   <div className="flex items-center gap-1 text-xs text-gray-500 mb-1">
                     <Flame className="w-3 h-3 text-red-500" /> 常出熱門號
                   </div>
-                  <div className="text-sm font-bold text-gray-800 tracking-wide break-words">
+                  <div className="text-sm font-bold text-gray-800 tracking-wide break-words leading-relaxed">
                     {analysisData.hot.map(n => formatNumber(n)).join(' ')}
                   </div>
                 </div>
@@ -409,7 +416,7 @@ const App = () => {
                   <div className="flex items-center gap-1 text-xs text-gray-500 mb-1">
                     <Snowflake className="w-3 h-3 text-blue-400" /> 未出冷門號
                   </div>
-                  <div className="text-sm font-bold text-gray-800 tracking-wide break-words">
+                  <div className="text-sm font-bold text-gray-800 tracking-wide break-words leading-relaxed">
                     {analysisData.cold.map(n => formatNumber(n)).join(' ')}
                   </div>
                 </div>
