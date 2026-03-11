@@ -25,6 +25,9 @@ const App = () => {
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [showInstallBtn, setShowInstallBtn] = useState(false);
 
+  // 內建金元寶 SVG (避免外部圖片破圖)
+  const godOfWealthImg = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj48cGF0aCBmaWxsPSIjRkZDQzAwIiBkPSJNMjU2IDMyYy02MCAwLTEwMCA2MC0xMDAgMTIwIDAgNDAgMjAgODAgNjAgMTAwLTQwIDIwLTgwIDYwLTgwIDEwMHM0MCA4MCA4MCA4MGg4MGM0MCAwIDgwLTQwIDgwLTgwczQwLTgwLTgwLTEwMGM0MC0yMCA2MC02MCA2MC0xMDBDMzU2IDkyIDMxNiAzMiAyNTYgMzJ6bTAgNDAgYzQwIDAgNjAgNDAgNjAgODBzLTIwIDgwLTYwIDgwLTYwLTQwLTYwLTgwczIwLTgwIDYwLTgweiIvPjwvc3ZnPg==";
+
   // --- 自動載入 Tailwind CSS ---
   useEffect(() => {
     const existingScript = document.querySelector('script[src*="tailwindcss"]');
@@ -336,13 +339,9 @@ const App = () => {
           <div className="relative z-10 flex flex-col items-center">
             <div className="w-20 h-20 sm:w-28 sm:h-28 rounded-full bg-white p-1 shadow-xl mb-3 border-4 border-yellow-300 transform hover:scale-105 transition-transform duration-300 overflow-hidden flex items-center justify-center">
                <img 
-                 src="god_of_wealth.png" 
+                 src={godOfWealthImg}
                  alt="財神金元寶" 
-                 className="w-full h-full object-cover"
-                 onError={(e) => {
-                   e.target.onerror = null;
-                   e.target.src = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj48cGF0aCBmaWxsPSIjRkZDQzAwIiBkPSJNMjU2IDMyYy02MCAwLTEwMCA2MC0xMDAgMTIwIDAgNDAgMjAgODAgNjAgMTAwLTQwIDIwLTgwIDYwLTgwIDEwMHM0MCA4MCA4MCA4MGg4MGM0MCAwIDgwLTQwIDgwLTgwczQwLTgwLTgwLTEwMGM0MC0yMCA2MC02MCA2MC0xMDBDMzU2IDkyIDMxNiAzMiAyNTYgMzJ6bTAgNDAgYzQwIDAgNjAgNDAgNjAgODBzLTIwIDgwLTYwIDgwLTYwLTQwLTYwLTgwczIwLTgwIDYwLTgweiIvPjwvc3ZnPg==";
-                 }}
+                 className="w-full h-full object-contain p-2"
                />
             </div>
             <h1 className="text-2xl sm:text-4xl font-bold text-white flex items-center justify-center gap-2 sm:gap-3 drop-shadow-md">
@@ -366,7 +365,7 @@ const App = () => {
         {/* Main Content Area */}
         <div className="flex-grow p-4 sm:p-10 flex flex-col items-center justify-start sm:justify-center bg-gray-50/50 min-h-[50vh] sm:min-h-[300px]">
           
-          {/* AI 分析提示區 */}
+          {/* AI 分析提示區 (加入區間顯示功能) */}
           {useAi && analysisData && (
             <div className="w-full max-w-lg mb-6 bg-indigo-50 border border-indigo-200 rounded-xl p-3 sm:p-4 animate-fade-in">
               <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-3">
@@ -376,19 +375,23 @@ const App = () => {
                     大數據分析結果
                   </h3>
                 </div>
+                {/* 分析區間 Badge */}
                 <div className="sm:ml-auto text-[10px] sm:text-xs text-indigo-700 bg-indigo-100/80 px-2.5 py-1.5 rounded-md font-bold border border-indigo-200 shadow-sm inline-block tracking-wide">
                   {(() => {
-                    if (!analysisData.lastDraw) return '模擬數據';
-                    // 擷取期數數字
-                    const match = analysisData.lastDraw.drawDate.match(/\d+/);
-                    if (match) {
-                      const endPeriod = parseInt(match[0], 10);
-                      const count = analysisData.analyzedDraws;
-                      if (count > 1) {
-                        return `🔍 分析區間: ${endPeriod - count + 1} ~ ${endPeriod} 期`;
+                    if (!analysisData.lastDraw) return '🔍 模擬數據';
+                    // 若是賓果賓果，精算期數區間
+                    if (gameType === 'bingoBingo') {
+                      const match = analysisData.lastDraw.drawDate.match(/\d+/);
+                      if (match) {
+                        const endPeriod = parseInt(match[0], 10);
+                        const count = analysisData.analyzedDraws;
+                        if (count > 1) {
+                          return `🔍 分析區間: ${endPeriod - count + 1} ~ ${endPeriod} 期`;
+                        }
+                        return `🔍 分析期數: 第 ${endPeriod} 期`;
                       }
-                      return `🔍 分析期數: 第 ${endPeriod} 期`;
                     }
+                    // 威力彩/大樂透顯示更新日期
                     return `🔍 更新至: ${analysisData.lastDraw.drawDate}`;
                   })()}
                 </div>
