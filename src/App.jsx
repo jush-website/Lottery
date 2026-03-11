@@ -369,12 +369,29 @@ const App = () => {
           {/* AI 分析提示區 */}
           {useAi && analysisData && (
             <div className="w-full max-w-lg mb-6 bg-indigo-50 border border-indigo-200 rounded-xl p-3 sm:p-4 animate-fade-in">
-              <div className="flex items-center gap-2 mb-2">
-                <Brain className="w-4 h-4 text-indigo-600" />
-                <h3 className="text-sm font-bold text-indigo-800">
-                  {gameType === 'bingoBingo' ? `近 ${analysisData.analyzedDraws} 期大數據分析` : '大數據分析結果'}
-                </h3>
-                <span className="text-[10px] sm:text-xs text-gray-500 ml-auto">{analysisData.lastDraw ? `更新至: ${analysisData.lastDraw.drawDate}` : '模擬數據'}</span>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-3">
+                <div className="flex items-center gap-2">
+                  <Brain className="w-4 h-4 text-indigo-600" />
+                  <h3 className="text-sm font-bold text-indigo-800">
+                    大數據分析結果
+                  </h3>
+                </div>
+                <div className="sm:ml-auto text-[10px] sm:text-xs text-indigo-700 bg-indigo-100/80 px-2.5 py-1.5 rounded-md font-bold border border-indigo-200 shadow-sm inline-block tracking-wide">
+                  {(() => {
+                    if (!analysisData.lastDraw) return '模擬數據';
+                    // 擷取期數數字
+                    const match = analysisData.lastDraw.drawDate.match(/\d+/);
+                    if (match) {
+                      const endPeriod = parseInt(match[0], 10);
+                      const count = analysisData.analyzedDraws;
+                      if (count > 1) {
+                        return `🔍 分析區間: ${endPeriod - count + 1} ~ ${endPeriod} 期`;
+                      }
+                      return `🔍 分析期數: 第 ${endPeriod} 期`;
+                    }
+                    return `🔍 更新至: ${analysisData.lastDraw.drawDate}`;
+                  })()}
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-white p-2 rounded-lg shadow-sm">
