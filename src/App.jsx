@@ -369,37 +369,48 @@ const App = () => {
           {/* AI 分析提示區 (含期數區間動態顯示) */}
           {useAi && analysisData && (
             <div className="w-full max-w-lg mb-6 bg-indigo-50 border border-indigo-200 rounded-xl p-3 sm:p-4 animate-fade-in">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-3">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-4">
                 <div className="flex items-center gap-2">
-                  <Brain className="w-4 h-4 text-indigo-600" />
-                  <h3 className="text-sm font-bold text-indigo-800">
+                  <Brain className="w-5 h-5 text-indigo-600" />
+                  <h3 className="text-base font-bold text-indigo-800">
                     大數據分析結果
                   </h3>
                 </div>
-                
-                {/* 動態顯示分析的期數區間 */}
-                <div className="sm:ml-auto text-[10px] sm:text-xs text-indigo-700 bg-indigo-100/80 px-2.5 py-1.5 rounded-md font-bold border border-indigo-200 shadow-sm inline-block tracking-wide">
-                  {(() => {
-                    if (!analysisData.lastDraw) return '🔍 模擬數據';
-                    
-                    if (analysisData.firstDraw && analysisData.lastDraw) {
-                      const startMatch = String(analysisData.firstDraw.drawDate).match(/\d+/);
-                      const endMatch = String(analysisData.lastDraw.drawDate).match(/\d+/);
-                      
-                      if (startMatch && endMatch) {
-                        const startNum = parseInt(startMatch[0], 10);
-                        const endNum = parseInt(endMatch[0], 10);
-                        const minNum = Math.min(startNum, endNum);
-                        const maxNum = Math.max(startNum, endNum);
+              </div>
 
-                        if (minNum === maxNum) {
-                          return `🔍 分析期數: 第 ${maxNum} 期`;
-                        }
-                        return `🔍 分析區間: 第 ${minNum} ~ ${maxNum} 期`;
-                      }
+              {/* --- 直接顯示在畫面上：大字體強調分析區間 --- */}
+              <div className="bg-white border-2 border-indigo-300 rounded-lg p-4 mb-4 text-center shadow-sm">
+                <span className="text-sm font-bold text-indigo-500 block mb-1">📊 歷史開獎分析區間</span>
+                <div className="text-lg sm:text-xl font-black text-indigo-700 tracking-wider">
+                  {(() => {
+                    if (!analysisData.lastDraw) return '模擬隨機數據';
+                    
+                    let endNum = 0;
+                    let startNum = 0;
+                    
+                    // 擷取最新一期的數字
+                    const endMatch = String(analysisData.lastDraw.drawDate).match(/\d+/);
+                    if (endMatch) endNum = parseInt(endMatch[0], 10);
+                    
+                    // 雙重保險：即使後端沒有傳回 firstDraw，前端也能靠總期數完美反推
+                    if (analysisData.firstDraw) {
+                      const startMatch = String(analysisData.firstDraw.drawDate).match(/\d+/);
+                      if (startMatch) startNum = parseInt(startMatch[0], 10);
+                    } else if (endNum > 0 && analysisData.analyzedDraws) {
+                      startNum = endNum - analysisData.analyzedDraws + 1;
                     }
-                    return `🔍 更新至: ${analysisData.lastDraw.drawDate}`;
+                    
+                    if (startNum > 0 && endNum > 0) {
+                      const min = Math.min(startNum, endNum);
+                      const max = Math.max(startNum, endNum);
+                      if (min === max) return `第 ${max} 期`;
+                      return `第 ${min} 期 ~ 第 ${max} 期`;
+                    }
+                    return analysisData.lastDraw.drawDate;
                   })()}
+                </div>
+                <div className="text-xs text-indigo-400 mt-1 font-semibold">
+                  (共回溯分析了 {analysisData.analyzedDraws || bingoBetPeriods} 期的大數據)
                 </div>
               </div>
 
