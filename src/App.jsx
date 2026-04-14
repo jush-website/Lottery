@@ -28,7 +28,7 @@ const App = () => {
   // 內建金元寶 SVG (避免外部圖片破圖)
   const godOfWealthImg = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj48cGF0aCBmaWxsPSIjRkZDQzAwIiBkPSJNMjU2IDMyYy02MCAwLTEwMCA2MC0xMDAgMTIwIDAgNDAgMjAgODAgNjAgMTAwLTQwIDIwLTgwIDYwLTgwIDEwMHM0MCA4MCA4MCA4MGg4MGM0MCAwIDgwLTQwIDgwLTgwczQwLTgwLTgwLTEwMGM0MC0yMCA2MC02MCA2MC0xMDBDMzU2IDkyIDMxNiAzMiAyNTYgMzJ6bTAgNDAgYzQwIDAgNjAgNDAgNjAgODBzLTIwIDgwLTYwIDgwLTYwLTQwLTYwLTgwczIwLTgwIDYwLTgweiIvPjwvc3ZnPg==";
 
-  // --- 自動載入 Tailwind CSS (防畫面閃爍) ---
+  // --- 自動載入 Tailwind CSS ---
   useEffect(() => {
     const existingScript = document.querySelector('script[src*="tailwindcss"]');
     const handleLoadComplete = () => setTimeout(() => setIsLoading(false), 1200);
@@ -144,7 +144,6 @@ const App = () => {
   // 向後端請求 AI 分析結果
   const fetchAiNumbers = async () => {
     try {
-      // 根據選擇的遊戲類型動態傳遞參數，若是大樂透或威力彩則回溯較多期數確保分析量
       const reqPeriods = gameType === 'bingoBingo' ? bingoBetPeriods : 50;
       const reqStars = gameType === 'bingoBingo' ? bingoStars : 6;
       
@@ -160,7 +159,7 @@ const App = () => {
     }
   };
 
-  // 計算賓果賓果成本 (基本價25 + 超級獎號) * 倍數 * 期數
+  // 計算賓果賓果成本
   const calculateBingoCost = () => {
     const basePrice = 25;
     const superPrice = bingoSuper ? 25 : 0;
@@ -179,7 +178,7 @@ const App = () => {
     setExtraInfo(null);
     if (mode === 'random') setAnalysisData(null);
 
-    // 1. 如果是 AI 模式，先抓取 API 數據
+    // 1. 取得 AI 數據
     let aiResult = null;
     if (mode === 'ai') {
       aiResult = await fetchAiNumbers();
@@ -188,16 +187,17 @@ const App = () => {
           hot: aiResult.hotNumbers,
           cold: aiResult.coldNumbers,
           lastDraw: aiResult.lastDraw,
-          firstDraw: aiResult.firstDraw, // 取得最舊的一期，用於顯示區間
+          firstDraw: aiResult.firstDraw,
           aiRecommendation: aiResult.aiRecommendation,
-          analyzedDraws: aiResult.analyzedDraws 
+          analyzedDraws: aiResult.analyzedDraws,
+          confidenceIndex: aiResult.confidenceIndex // ★ 接收後端信心指數
         });
       }
     }
 
     setIsAiAnalyzing(false);
 
-    // 2. 滾動動畫
+    // 2. 動畫滾動
     let intervalId;
     const duration = 800;
     const startTime = Date.now();
@@ -226,7 +226,7 @@ const App = () => {
         
         // 3. 最終定案
         if (mode === 'ai' && aiResult) {
-          setNumbers(aiResult.aiRecommendation); // 後端已為賓果算出星數對應的冷熱號碼
+          setNumbers(aiResult.aiRecommendation);
           if (gameType === 'superLotto') setSpecialNumber(Math.floor(Math.random() * 8) + 1);
           if (gameType === 'bingoBingo') {
              if (bingoSuper) setSpecialNumber(Math.floor(Math.random() * 80) + 1);
@@ -280,8 +280,8 @@ const App = () => {
 
     return (
       <div className="flex flex-col items-center animate-bounce-short relative group">
-        {isHot && <div className="absolute -top-2 -right-2 text-xs bg-red-500 text-white rounded-full px-1.5 py-0.5 z-10 animate-pulse border border-white">🔥</div>}
-        {isCold && <div className="absolute -top-2 -right-2 text-xs bg-blue-400 text-white rounded-full px-1.5 py-0.5 z-10 border border-white">❄️</div>}
+        {isHot && <div className="absolute -top-2 -right-2 text-xs bg-red-500 text-white rounded-full px-1.5 py-0.5 z-10 animate-pulse border border-white shadow-md">🔥</div>}
+        {isCold && <div className="absolute -top-2 -right-2 text-xs bg-blue-400 text-white rounded-full px-1.5 py-0.5 z-10 border border-white shadow-md">❄️</div>}
         
         <div className={`
           ${sizeClass}
@@ -366,33 +366,36 @@ const App = () => {
         {/* Main Content Area */}
         <div className="flex-grow p-4 sm:p-10 flex flex-col items-center justify-start sm:justify-center bg-gray-50/50 min-h-[50vh] sm:min-h-[300px]">
           
-          {/* AI 分析提示區 (含期數區間動態顯示) */}
+          {/* AI 分析提示區 */}
           {useAi && analysisData && (
-            <div className="w-full max-w-lg mb-6 bg-indigo-50 border border-indigo-200 rounded-xl p-3 sm:p-4 animate-fade-in">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-4">
+            <div className="w-full max-w-lg mb-6 bg-indigo-50 border border-indigo-200 rounded-xl p-3 sm:p-4 animate-fade-in relative shadow-sm">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
                 <div className="flex items-center gap-2">
                   <Brain className="w-5 h-5 text-indigo-600" />
-                  <h3 className="text-base font-bold text-indigo-800">
-                    大數據分析結果
-                  </h3>
+                  <h3 className="text-base font-bold text-indigo-800">大數據與 AI 分析結果</h3>
                 </div>
+                
+                {/* ★ 外部 AI 信心指數標籤顯示在這裡 */}
+                {analysisData.confidenceIndex && (
+                  <div className="flex items-center gap-1.5 bg-gradient-to-r from-emerald-400 to-green-500 px-3 py-1.5 rounded-full shadow-sm text-white">
+                    <Trophy className="w-3 h-3 text-yellow-200" />
+                    <span className="text-xs font-bold tracking-wide">模型信心指數: {analysisData.confidenceIndex}</span>
+                  </div>
+                )}
               </div>
 
-              {/* --- 直接顯示在畫面上：大字體強調分析區間 --- */}
-              <div className="bg-white border-2 border-indigo-300 rounded-lg p-4 mb-4 text-center shadow-sm">
-                <span className="text-sm font-bold text-indigo-500 block mb-1">📊 歷史開獎分析區間</span>
-                <div className="text-lg sm:text-xl font-black text-indigo-700 tracking-wider">
+              {/* 期數區間動態顯示 */}
+              <div className="bg-white border-2 border-indigo-200 rounded-lg p-3 mb-4 text-center">
+                <span className="text-xs font-bold text-indigo-400 block mb-1">📊 歷史開獎分析區間</span>
+                <div className="text-lg sm:text-xl font-black text-indigo-600 tracking-wider">
                   {(() => {
                     if (!analysisData.lastDraw) return '模擬隨機數據';
-                    
                     let endNum = 0;
                     let startNum = 0;
                     
-                    // 擷取最新一期的數字
                     const endMatch = String(analysisData.lastDraw.drawDate).match(/\d+/);
                     if (endMatch) endNum = parseInt(endMatch[0], 10);
                     
-                    // 雙重保險：即使後端沒有傳回 firstDraw，前端也能靠總期數完美反推
                     if (analysisData.firstDraw) {
                       const startMatch = String(analysisData.firstDraw.drawDate).match(/\d+/);
                       if (startMatch) startNum = parseInt(startMatch[0], 10);
@@ -409,25 +412,25 @@ const App = () => {
                     return analysisData.lastDraw.drawDate;
                   })()}
                 </div>
-                <div className="text-xs text-indigo-400 mt-1 font-semibold">
-                  (共回溯分析了 {analysisData.analyzedDraws || bingoBetPeriods} 期的大數據)
+                <div className="text-[10px] text-gray-400 mt-1 font-medium">
+                  (共回溯了 {analysisData.analyzedDraws || bingoBetPeriods} 期的大數據)
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-white p-2 rounded-lg shadow-sm">
-                  <div className="flex items-center gap-1 text-xs text-gray-500 mb-1">
-                    <Flame className="w-3 h-3 text-red-500" /> 常出熱門號
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-white p-2.5 rounded-lg border border-red-100 shadow-sm">
+                  <div className="flex items-center gap-1 text-xs font-bold text-gray-500 mb-2">
+                    <Flame className="w-3.5 h-3.5 text-red-500" /> 近期熱門號
                   </div>
-                  <div className="text-sm font-bold text-gray-800 tracking-wide break-words leading-relaxed">
+                  <div className="text-sm font-bold text-gray-700 tracking-wide break-words leading-relaxed">
                     {analysisData.hot.map(n => formatNumber(n)).join(' ')}
                   </div>
                 </div>
-                <div className="bg-white p-2 rounded-lg shadow-sm">
-                  <div className="flex items-center gap-1 text-xs text-gray-500 mb-1">
-                    <Snowflake className="w-3 h-3 text-blue-400" /> 未出冷門號
+                <div className="bg-white p-2.5 rounded-lg border border-blue-100 shadow-sm">
+                  <div className="flex items-center gap-1 text-xs font-bold text-gray-500 mb-2">
+                    <Snowflake className="w-3.5 h-3.5 text-blue-400" /> 近期冷門號
                   </div>
-                  <div className="text-sm font-bold text-gray-800 tracking-wide break-words leading-relaxed">
+                  <div className="text-sm font-bold text-gray-700 tracking-wide break-words leading-relaxed">
                     {analysisData.cold.map(n => formatNumber(n)).join(' ')}
                   </div>
                 </div>
@@ -466,13 +469,14 @@ const App = () => {
           {gameType === 'bingoBingo' && (
             <div className="w-full text-center animate-fade-in">
               {/* 控制面板 */}
-              <div className="bg-white border border-orange-200 rounded-2xl p-4 mb-6 max-w-2xl mx-auto shadow-sm text-left">
-                <h3 className="font-bold text-orange-900 mb-4 flex items-center gap-2 text-sm sm:text-base">
+              <div className="bg-white border border-orange-200 rounded-2xl p-4 mb-6 max-w-2xl mx-auto shadow-sm text-left relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-orange-50 rounded-full blur-2xl transform translate-x-1/2 -translate-y-1/2"></div>
+                <h3 className="font-bold text-orange-900 mb-4 flex items-center gap-2 text-sm sm:text-base relative z-10">
                   <Calculator className="w-5 h-5" /> 玩法設定與試算
                 </h3>
                 
                 {/* 星數選擇 */}
-                <div className="mb-5">
+                <div className="mb-5 relative z-10">
                   <label className="text-xs text-gray-500 font-bold mb-2 block">選擇玩法 (1~10星)</label>
                   <div className="flex flex-wrap gap-2">
                     {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(star => (
@@ -492,7 +496,7 @@ const App = () => {
                 </div>
 
                 {/* 網格設定區 */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5 relative z-10">
                   {/* 倍率 */}
                   <div className="bg-gray-50 p-3 rounded-xl border border-gray-100 flex flex-col justify-between">
                     <label className="text-xs text-gray-500 font-bold mb-2 flex items-center gap-1">購買倍數</label>
@@ -528,7 +532,7 @@ const App = () => {
                 </div>
 
                 {/* 總金額試算 */}
-                <div className="bg-orange-50 p-4 rounded-xl flex justify-between items-center border border-orange-100">
+                <div className="bg-orange-50 p-4 rounded-xl flex justify-between items-center border border-orange-200 relative z-10 shadow-inner">
                   <div className="flex flex-col">
                     <span className="text-orange-800 text-sm font-bold">預估投注總金額</span>
                     <span className="text-xs text-orange-600/70">
@@ -541,7 +545,8 @@ const App = () => {
                 </div>
               </div>
 
-              <div className="mb-4 text-orange-900 font-semibold bg-orange-100 inline-block px-4 py-1.5 rounded-full text-xs sm:text-sm shadow-sm">
+              <div className="mb-4 text-orange-900 font-semibold bg-orange-100 inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs sm:text-sm shadow-sm border border-orange-200">
+                <span className="w-2 h-2 rounded-full bg-orange-500 animate-pulse"></span>
                 本次投注: {bingoStars} 星玩法 / 連續 {bingoBetPeriods} 期
               </div>
               
@@ -555,22 +560,22 @@ const App = () => {
                   })
                 ) : (
                   <div className="text-gray-400 italic py-8 text-sm sm:text-base w-full flex flex-col items-center gap-2">
-                    <p>調整上方設定，點擊下方選號按鈕！</p>
+                    <p>調整上方設定，點擊下方 AI 選號按鈕！</p>
                   </div>
                 )}
               </div>
 
               {/* 附加玩法區 */}
               {(specialNumber !== null || bingoSuper) && (
-                <div className="flex flex-col sm:flex-row items-center justify-center gap-6 sm:gap-12 mt-4 bg-orange-50/50 p-4 rounded-xl border border-orange-100">
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-6 sm:gap-12 mt-4 bg-white p-4 rounded-xl border border-orange-100 shadow-sm mx-auto max-w-lg">
                   <div className={`flex flex-col items-center transition-all ${bingoSuper ? 'opacity-100' : 'opacity-50 grayscale'}`}>
                     <div className="mb-2 text-purple-900 font-bold text-xs sm:text-sm flex items-center gap-1">超級獎號 {bingoSuper ? '(已加購)' : '(未加購)'}</div>
-                    {specialNumber ? <LottoBall num={specialNumber} colorClass="bg-gradient-to-br from-purple-500 to-purple-700" label="1-80" /> : <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-gray-400 font-bold">?</div>}
+                    {specialNumber ? <LottoBall num={specialNumber} colorClass="bg-gradient-to-br from-purple-500 to-purple-700" label="1-80" /> : <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-300 font-bold border-2 border-dashed border-gray-300">?</div>}
                   </div>
                   <div className="hidden sm:block w-px h-16 bg-gray-200"></div>
                   <div className="flex flex-col items-center">
                      <div className="mb-2 text-blue-900 font-bold text-xs sm:text-sm">猜大小 (機率參考)</div>
-                     <div className={`w-16 h-16 sm:w-20 sm:h-20 rounded-xl flex items-center justify-center text-3xl sm:text-4xl font-black text-white shadow-lg transform transition-all duration-500 ${extraInfo === '大' ? 'bg-gradient-to-br from-red-500 to-rose-600' : extraInfo === '小' ? 'bg-gradient-to-br from-blue-500 to-cyan-600' : 'bg-gray-300'}`}>
+                     <div className={`w-16 h-16 sm:w-20 sm:h-20 rounded-xl flex items-center justify-center text-3xl sm:text-4xl font-black text-white shadow-lg transform transition-all duration-500 ${extraInfo === '大' ? 'bg-gradient-to-br from-red-500 to-rose-600' : extraInfo === '小' ? 'bg-gradient-to-br from-blue-500 to-cyan-600' : 'bg-gray-200'}`}>
                        {extraInfo || '?'}
                      </div>
                   </div>
@@ -616,7 +621,7 @@ const App = () => {
           {/* AI 按鈕 */}
           {gameType !== 'scratch' && (
             <button onClick={() => handleGenerate('ai')} disabled={isRolling || isAiAnalyzing} className={`w-full sm:w-auto px-8 py-3 rounded-xl sm:rounded-full text-white font-bold text-base shadow-xl flex items-center justify-center gap-2 transition-all transform hover:-translate-y-1 active:scale-95 ${(isRolling && useAi) || isAiAnalyzing ? 'bg-indigo-400 cursor-not-allowed' : 'bg-gradient-to-r from-violet-600 to-indigo-600 hover:shadow-indigo-200 hover:ring-2 hover:ring-indigo-300'}`}>
-              {isAiAnalyzing ? (<><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>回溯分析前 {gameType === 'bingoBingo' ? bingoBetPeriods : '50'} 期...</>) : (<><Brain className="w-5 h-5" />{gameType === 'bingoBingo' ? '依期數大數據選號' : 'AI 大數據選號'}</>)}
+              {isAiAnalyzing ? (<><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>正在爬取推薦資料...</>) : (<><Brain className="w-5 h-5" />{gameType === 'bingoBingo' ? '取得外部 AI 推薦與分析' : 'AI 大數據選號'}</>)}
             </button>
           )}
           
@@ -629,7 +634,7 @@ const App = () => {
         </div>
       </div>
       
-      <style dangerouslySetInnerHTML={{__html: `@keyframes bounce-short { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } } @keyframes fade-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } } .animate-bounce-short { animation: bounce-short 0.5s ease-in-out; } .animate-fade-in { animation: fade-in 0.4s ease-out; } .pattern-dots { background-image: radial-gradient(#e5e7eb 1px, transparent 1px); background-size: 10px 10px; }`}} />
+      <style dangerouslySetInnerHTML={{__html: `@keyframes bounce-short { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } } @keyframes fade-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } } .pattern-dots { background-image: radial-gradient(#e5e7eb 1px, transparent 1px); background-size: 10px 10px; }`}} />
     </div>
   );
 };
