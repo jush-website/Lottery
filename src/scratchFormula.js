@@ -19,3 +19,10 @@ export const computeScratchNumbers = ({ a, b, c, winRate, step = 0.033, count = 
   }
   return { d, variant: used, rows };
 };
+
+// 彩券編號（例：014129-092）取前 6 碼，兩碼一組拆成 A、B、C；不足 6 碼回傳 null
+export const parseSerial = (serial) => {
+  const digits = String(serial).replace(/\D/g, '');
+  if (digits.length < 6) return null;
+  return [digits.slice(0, 2), digits.slice(2, 4), digits.slice(4, 6)];
+};
