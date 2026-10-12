@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Sparkles, CircleDollarSign, Ticket, RefreshCw, Trophy, Smartphone, Monitor, Brain, Flame, Snowflake, Download, LayoutGrid, Calculator, Coins, History } from 'lucide-react';
+import { computeScratchNumbers } from './scratchFormula';
 
 const App = () => {
   const [gameType, setGameType] = useState('superLotto');
@@ -15,6 +16,17 @@ const App = () => {
   
   const [isRolling, setIsRolling] = useState(false);
   const [scratchStates, setScratchStates] = useState([]); 
+
+  // 刮刮樂公式：D = A + B + C，號碼 = D × (中獎率 + N)，N = 0.033 × 1, 2, 3...
+  const [scratchA, setScratchA] = useState('03');
+  const [scratchB, setScratchB] = useState('43');
+  const [scratchC, setScratchC] = useState('91');
+  const [scratchRate, setScratchRate] = useState('30'); // 中獎率 %，彩券背面有寫
+  const [scratchCount, setScratchCount] = useState('30'); // 一本大約中 30 張
+  const [scratchVariant, setScratchVariant] = useState('auto'); // 'auto' | 'rate'(款式一) | 'base'(款式二)
+  const [scratchMax, setScratchMax] = useState(''); // 號碼上限，空白 = 不限制
+  const [scratchD, setScratchD] = useState(null);
+  const [scratchUsedVariant, setScratchUsedVariant] = useState(null);
   const [isMobile, setIsMobile] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   
@@ -159,6 +171,24 @@ const App = () => {
     }
   };
 
+  const toNum = (v, fallback = 0) => {
+    const n = parseFloat(v);
+    return Number.isFinite(n) ? n : fallback;
+  };
+
+  const getScratchCount = () => Math.min(Math.max(Math.floor(toNum(scratchCount, 30)), 1), 60);
+
+  const computeScratch = (a, b, c) => {
+    const { d, variant, rows } = computeScratchNumbers({
+      a: toNum(a), b: toNum(b), c: toNum(c),
+      winRate: toNum(scratchRate) / 100,
+      count: getScratchCount(),
+      variant: scratchVariant,
+      maxNumber: Math.max(Math.floor(toNum(scratchMax)), 0),
+    });
+    return { d, variant, labels: rows.map(r => (r.low === r.high ? `${r.low}` : `${r.low}/${r.high}`)) };
+  };
+
   // 計算賓果賓果成本
   const calculateBingoCost = () => {
     const basePrice = 25;
@@ -168,13 +198,23 @@ const App = () => {
 
   const handleGenerate = useCallback(async (mode = 'random') => {
     if (isRolling || isAiAnalyzing) return;
-    if (gameType === 'scratch') mode = 'random';
+    // 刮刮樂：'random' = 隨機產生 A、B、C 後套公式，'formula' = 用輸入的 A、B、C 套公式
+    let scratchInput = [scratchA, scratchB, scratchC];
+    if (gameType === 'scratch') {
+      if (mode === 'random') {
+        scratchInput = generateUniqueNumbers(3, 1, 99, false).map(formatNumber);
+        setScratchA(scratchInput[0]);
+        setScratchB(scratchInput[1]);
+        setScratchC(scratchInput[2]);
+      }
+      mode = 'random';
+    }
 
     setUseAi(mode === 'ai');
     setIsRolling(true);
     if (mode === 'ai') setIsAiAnalyzing(true);
     
-    if (gameType === 'scratch') setScratchStates(Array(6).fill(true));
+    if (gameType === 'scratch') setScratchStates(Array(getScratchCount()).fill(true));
     setExtraInfo(null);
     if (mode === 'random') setAnalysisData(null);
 
@@ -216,7 +256,7 @@ const App = () => {
         setSpecialNumber(bingoSuper ? Math.floor(Math.random() * 80) + 1 : null);
         setExtraInfo(Math.random() > 0.5 ? '大' : '小');
       } else if (gameType === 'scratch') {
-        setNumbers([...generateUniqueNumbers(3, 1, 99, false), ...generateUniqueNumbers(3, 100, 999, false)]);
+        setNumbers(generateUniqueNumbers(getScratchCount(), 1, 199, false));
         setSpecialNumber(null);
       }
 
@@ -232,6 +272,12 @@ const App = () => {
              if (bingoSuper) setSpecialNumber(Math.floor(Math.random() * 80) + 1);
              setExtraInfo(Math.random() > 0.5 ? '大' : '小');
           }
+        } else if (gameType === 'scratch') {
+          const { d, variant, labels } = computeScratch(...scratchInput);
+          setScratchD(d);
+          setScratchUsedVariant(variant);
+          setNumbers(labels);
+          setScratchStates(Array(labels.length).fill(true));
         } else {
           finalizeRandomNumbers();
         }
@@ -239,7 +285,7 @@ const App = () => {
     };
 
     intervalId = setInterval(updateNumbers, 50);
-  }, [gameType, bingoStars, bingoSuper, bingoMultiplier, bingoBetPeriods]);
+  }, [gameType, bingoStars, bingoSuper, bingoMultiplier, bingoBetPeriods, scratchA, scratchB, scratchC, scratchRate, scratchCount, scratchVariant, scratchMax]);
 
   const finalizeRandomNumbers = () => {
     if (gameType === 'superLotto') {
@@ -251,8 +297,6 @@ const App = () => {
       setNumbers(generateUniqueNumbers(bingoStars, 1, 80));
       setSpecialNumber(bingoSuper ? Math.floor(Math.random() * 80) + 1 : null);
       setExtraInfo(Math.random() > 0.5 ? '大' : '小');
-    } else if (gameType === 'scratch') {
-      setNumbers([...generateUniqueNumbers(3, 1, 99, false), ...generateUniqueNumbers(3, 100, 999, false)]);
     }
   };
 
@@ -263,7 +307,9 @@ const App = () => {
     setIsRolling(false);
     setAnalysisData(null);
     setUseAi(false);
-    setScratchStates(Array(6).fill(true));
+    setScratchStates([]);
+    setScratchD(null);
+    setScratchUsedVariant(null);
   }, [gameType]);
 
   const handleScratchClick = (index) => {
@@ -587,15 +633,65 @@ const App = () => {
           {/* 刮刮樂顯示區 */}
           {gameType === 'scratch' && (
             <div className="w-full flex flex-col items-center animate-fade-in">
-              <div className="mb-6 text-pink-800 font-semibold bg-pink-100 inline-block px-4 py-1.5 rounded-full text-xs sm:text-sm shadow-sm">
-                幸運號碼 (1-99 三組 + 100-999 三組)
+              <div className="mb-4 text-pink-800 font-semibold bg-pink-100 inline-block px-4 py-1.5 rounded-full text-xs sm:text-sm shadow-sm">
+                公式選號：D = A + B + C
               </div>
-              <div className="flex flex-wrap justify-center gap-4 w-full">
+              <div className="flex bg-white rounded-xl border border-pink-200 p-1 mb-3 text-xs sm:text-sm font-bold">
+                {[
+                  ['auto', '自動'],
+                  ['rate', '款式一'],
+                  ['base', '款式二'],
+                ].map(([key, label]) => (
+                  <button
+                    key={key}
+                    onClick={() => setScratchVariant(key)}
+                    disabled={isRolling}
+                    className={`px-3 sm:px-4 py-1.5 rounded-lg transition-colors ${scratchVariant === key ? 'bg-pink-500 text-white' : 'text-pink-600 hover:bg-pink-50'}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div className="mb-3 text-[11px] sm:text-xs text-gray-500 text-center leading-relaxed">
+                款式一：D × (中獎率 + 0.033 × N)，例 137 × 0.399 = 54.663<br />
+                款式二：D × (1 + 中獎率 × N)，例 71 × 1.3 = 92.3<br />
+                自動：D 小於 100 用款式二，否則用款式一
+              </div>
+              <div className="w-full max-w-lg grid grid-cols-3 sm:grid-cols-6 gap-2 mb-3">
+                {[
+                  ['A', scratchA, setScratchA],
+                  ['B', scratchB, setScratchB],
+                  ['C', scratchC, setScratchC],
+                  ['中獎率%', scratchRate, setScratchRate],
+                  ['張數', scratchCount, setScratchCount],
+                  ['號碼上限', scratchMax, setScratchMax],
+                ].map(([label, value, setter]) => (
+                  <label key={label} className="flex flex-col items-center gap-1 text-[11px] sm:text-xs font-bold text-pink-700">
+                    {label}
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={value}
+                      onChange={(e) => setter(e.target.value)}
+                      placeholder={label === '號碼上限' ? '不限' : undefined}
+                      disabled={isRolling}
+                      className="w-full px-2 py-2 rounded-lg border border-pink-200 bg-white text-center text-gray-800 text-base font-bold focus:outline-none focus:ring-2 focus:ring-pink-400 disabled:bg-gray-100"
+                    />
+                  </label>
+                ))}
+              </div>
+              {scratchD !== null && !isRolling && (
+                <div className="mb-4 text-xs sm:text-sm font-bold text-pink-700 bg-white border border-pink-200 rounded-lg px-3 py-1.5">
+                  D = {toNum(scratchA)} + {toNum(scratchB)} + {toNum(scratchC)} = {scratchD}，使用{scratchUsedVariant === 'base' ? '款式二' : '款式一'}
+                </div>
+              )}
+              <div className="flex flex-wrap justify-center gap-3 sm:gap-4 w-full">
                 {numbers.length > 0 ? (
                   numbers.map((num, index) => (
-                    <div key={index} className="relative w-24 h-24 sm:w-32 sm:h-32 bg-gray-200 rounded-xl shadow-inner border-2 sm:border-4 border-gray-300 overflow-hidden cursor-pointer select-none transition-transform active:scale-95 hover:shadow-lg" onClick={() => handleScratchClick(index)}>
+                    <div key={index} className="relative w-20 h-20 sm:w-28 sm:h-28 bg-gray-200 rounded-xl shadow-inner border-2 sm:border-4 border-gray-300 overflow-hidden cursor-pointer select-none transition-transform active:scale-95 hover:shadow-lg" onClick={() => handleScratchClick(index)}>
                       <div className="absolute inset-0 flex items-center justify-center bg-white pattern-dots">
-                        <span className={`font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-purple-600 transform transition-all duration-500 ${isRolling ? 'scale-75 blur-sm opacity-50' : 'scale-100 blur-0 opacity-100'} text-2xl sm:text-4xl`}>{num}</span>
+                        <span className="absolute top-1 left-1.5 text-[10px] font-bold text-gray-400">N={index + 1}</span>
+                        <span className={`font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-purple-600 transform transition-all duration-500 ${isRolling ? 'scale-75 blur-sm opacity-50' : 'scale-100 blur-0 opacity-100'} ${String(num).length > 4 ? 'text-lg sm:text-2xl' : 'text-2xl sm:text-4xl'}`}>{num}</span>
                       </div>
                       <div className={`absolute inset-0 bg-gradient-to-br from-gray-300 via-gray-400 to-gray-500 flex flex-col items-center justify-center transition-all duration-500 ${scratchStates[index] ? 'opacity-100' : 'opacity-0 pointer-events-none transform scale-110'}`}>
                          <span className="text-gray-100 font-bold text-sm sm:text-lg drop-shadow-md">刮</span>
@@ -604,10 +700,11 @@ const App = () => {
                     </div>
                   ))
                 ) : (
-                  <div className="relative w-full max-w-xs aspect-[2/1] bg-gray-100 rounded-xl border-2 border-dashed border-gray-300 flex items-center justify-center text-gray-400 text-sm">點擊按鈕產生 6 組幸運號碼</div>
+                  <div className="relative w-full max-w-xs aspect-[2/1] bg-gray-100 rounded-xl border-2 border-dashed border-gray-300 flex items-center justify-center text-gray-400 text-sm">輸入 A、B、C 後按「開始刮刮樂」</div>
                 )}
               </div>
-              <p className="mt-6 text-sm text-gray-500 animate-pulse">{numbers.length > 0 && !isRolling ? "👇 點擊個別卡片刮開號碼" : "✨ 試試手氣！包含大小號碼！"}</p>
+              <p className="mt-6 text-sm text-gray-500 animate-pulse">{numbers.length > 0 && !isRolling ? "👇 點擊個別卡片刮開號碼（54/55 代表選 54 或 55）" : "✨ 隨機選號會自動產生 A、B、C"}</p>
+              <p className="mt-2 text-[11px] text-gray-400 text-center max-w-md">刮刮樂中獎張在印製時就已決定，此公式無法提高中獎機率，僅供娛樂參考。</p>
             </div>
           )}
         </div>
@@ -627,7 +724,7 @@ const App = () => {
           
           {/* 刮刮樂按鈕 */}
           {(gameType === 'scratch') && (
-             <button onClick={() => handleGenerate('random')} disabled={isRolling} className={`w-full sm:w-auto px-8 py-3 rounded-xl sm:rounded-full text-white font-bold text-base shadow-xl flex items-center justify-center gap-2 transition-all transform hover:-translate-y-1 active:scale-95 ${isRolling ? 'bg-gray-400 cursor-not-allowed' : 'bg-gradient-to-r from-pink-500 to-rose-500 hover:shadow-pink-200'}`}>
+             <button onClick={() => handleGenerate('formula')} disabled={isRolling} className={`w-full sm:w-auto px-8 py-3 rounded-xl sm:rounded-full text-white font-bold text-base shadow-xl flex items-center justify-center gap-2 transition-all transform hover:-translate-y-1 active:scale-95 ${isRolling ? 'bg-gray-400 cursor-not-allowed' : 'bg-gradient-to-r from-pink-500 to-rose-500 hover:shadow-pink-200'}`}>
              <Ticket className={`w-5 h-5 ${isRolling ? 'animate-spin' : ''}`} /> {isRolling ? '準備中...' : '開始刮刮樂'}
            </button>
           )}
